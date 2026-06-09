@@ -874,3 +874,82 @@ body {
     grid-template-columns: 1fr;
   }
 }
+
+/* 设备巡检模块样式 */
+.device-status {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.device-status-normal { background: #d1fae5; color: #065f46; }
+.device-status-warning { background: #fef3c7; color: #92400e; }
+.device-status-fault { background: #fee2e2; color: #991b1b; }
+.device-status-maintenance { background: #e0e7ff; color: #3730a3; }
+
+.fault-status {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.fault-status-pending { background: #fee2e2; color: #991b1b; }
+.fault-status-processing { background: #fef3c7; color: #92400e; }
+.fault-status-resolved { background: #d1fae5; color: #065f46; }
+.fault-status-closed { background: #e2e8f0; color: #475569; }
+
+.badge-low { background: #d1fae5; color: #065f46; }
+.badge-medium { background: #fef3c7; color: #92400e; }
+.badge-high { background: #fee2e2; color: #991b1b; }
+
+.inspection-item {
+  background: var(--bg);
+  border-radius: 10px;
+  padding: 14px;
+  border: 1px solid var(--border);
+}
+.inspection-item-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.inspection-item-body {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--border);
+}
+.status-radio-group {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.status-radio {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  border-radius: 20px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  border: 1px solid var(--border);
+  background: #fff;
+  transition: all 0.2s;
+}
+.status-radio input { display: none; }
+.status-radio-normal:has(input:checked) { background: #d1fae5; border-color: #065f46; color: #065f46; }
+.status-radio-warning:has(input:checked) { background: #fef3c7; border-color: #92400e; color: #92400e; }
+.status-radio-fault:has(input:checked) { background: #fee2e2; border-color: #991b1b; color: #991b1b; }
+.status-radio:hover { border-color: var(--primary); }
+
+.badge-booked { background: #dbeafe; color: #1e40af; }
+.badge-checked_in { background: #d1fae5; color: #065f46; }
+.badge-completed { background: #e0e7ff; color: #3730a3; }
+.badge-cancelled { background: #f1f5f9; color: #64748b; }
+.badge-low { background: #d1fae5; color: #065f46; }
+.badge-medium { background: #fef3c7; color: #92400e; }
+.badge-high { background: #fee2e2; color: #991b1b; }

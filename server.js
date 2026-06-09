@@ -517,6 +517,486 @@ app.get('/api/stats/dashboard', (req, res) => {
   });
 });
 
+// ==================== 设备管理 ====================
+
+app.get('/api/devices', (req, res) => {
+  const { room_id, status, type } = req.query;
+  const d = load();
+  let devices = [...d.devices];
+
+  if (room_id) {
+    devices = devices.filter(x => x.room_id === parseInt(room_id));
+  }
+  if (status) {
+    devices = devices.filter(x => x.status === status);
+  }
+  if (type) {
+    devices = devices.filter(x => x.type === type);
+  }
+
+  const result = devices.map(dev => {
+    const room = d.rooms.find(r => r.id === dev.room_id);
+    const faultCount = d.faults.filter(f => f.device_id === dev.id && f.status !== 'resolved').length;
+    return {
+      ...dev,
+      room_name: room?.name,
+      room_type: room?.type,
+      active_fault_count: faultCount
+    };
+  }).sort((a, b) => a.room_name?.localeCompare(b.room_name || '') || a.id - b.id);
+
+  res.json({ success: true, data: result });
+});
+
+app.get('/api/devices/:id', (req, res) => {
+  const d = load();
+  const dev = d.devices.find(x => x.id === parseInt(req.params.id));
+  if (!dev) return res.status(404).json({ success: false, message: '设备不存在' });
+
+  const room = d.rooms.find(r => r.id === dev.room_id);
+  const inspections = d.inspections
+    .filter(i => i.items?.some(it => it.device_id === dev.id))
+    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+    .slice(0, 10);
+  const faults = d.faults
+    .filter(f => f.device_id === dev.id)
+    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+  res.json({
+    success: true,
+    data: {
+      ...dev,
+      room_name: room?.name,
+      room_type: room?.type,
+      recent_inspections: inspections,
+      fault_history: faults
+    }
+  });
+});
+
+app.post('/api/devices', (req, res) => {
+  const { room_id, name, type, type_name, icon, brand, model, purchase_date, remark } = req.body;
+  if (!room_id || !name || !type) {
+    return res.status(400).json({ success: false, message: '缺少必要字段' });
+  }
+  const d = load();
+  const room = d.rooms.find(r => r.id === parseInt(room_id));
+  if (!room) return res.status(404).json({ success: false, message: '包间不存在' });
+
+  const id = nextId('devices');
+  const device = {
+    id,
+    room_id: parseInt(room_id),
+    name,
+    type,
+    type_name: type_name || name,
+    icon: icon || '🔧',
+    brand: brand || '',
+    model: model || '',
+    purchase_date: purchase_date || new Date().toISOString().split('T')[0],
+    status: 'normal',
+    last_inspection: null,
+    remark: remark || '',
+    created_at: new Date().toISOString()
+  };
+  d.devices.push(device);
+  save();
+  res.json({ success: true, data: device });
+});
+
+app.put('/api/devices/:id', (req, res) => {
+  const d = load();
+  const idx = d.devices.findIndex(x => x.id === parseInt(req.params.id));
+  if (idx === -1) return res.status(404).json({ success: false, message: '设备不存在' });
+
+  d.devices[idx] = { ...d.devices[idx], ...req.body, id: d.devices[idx].id };
+  save();
+  res.json({ success: true, message: '设备更新成功' });
+});
+
+app.put('/api/devices/:id/status', (req, res) => {
+  const { status } = req.body;
+  const validStatuses = ['normal', 'warning', 'fault', 'maintenance'];
+  if (!validStatuses.includes(status)) {
+    return res.status(400).json({ success: false, message: '无效状态' });
+  }
+  const d = load();
+  const idx = d.devices.findIndex(x => x.id === parseInt(req.params.id));
+  if (idx === -1) return res.status(404).json({ success: false, message: '设备不存在' });
+
+  d.devices[idx].status = status;
+  save();
+  res.json({ success: true, message: '状态更新成功' });
+});
+
+app.delete('/api/devices/:id', (req, res) => {
+  const d = load();
+  const idx = d.devices.findIndex(x => x.id === parseInt(req.params.id));
+  if (idx === -1) return res.status(404).json({ success: false, message: '设备不存在' });
+
+  d.devices.splice(idx, 1);
+  save();
+  res.json({ success: true, message: '设备已删除' });
+});
+
+// ==================== 巡检记录 ====================
+
+app.get('/api/inspections', (req, res) => {
+  const { room_id, start_date, end_date, inspector } = req.query;
+  const d = load();
+  let inspections = [...d.inspections];
+
+  if (room_id) {
+    const rid = parseInt(room_id);
+    inspections = inspections.filter(i => i.room_id === rid);
+  }
+  if (start_date) {
+    const sd = new Date(start_date);
+    inspections = inspections.filter(i => new Date(i.created_at) >= sd);
+  }
+  if (end_date) {
+    const ed = new Date(end_date);
+    ed.setDate(ed.getDate() + 1);
+    inspections = inspections.filter(i => new Date(i.created_at) < ed);
+  }
+  if (inspector) {
+    inspections = inspections.filter(i => i.inspector?.includes(inspector));
+  }
+
+  const result = inspections
+    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+    .map(ins => {
+      const room = d.rooms.find(r => r.id === ins.room_id);
+      const deviceResults = ins.items?.map(it => {
+        const dev = d.devices.find(dv => dv.id === it.device_id);
+        return { ...it, device_name: dev?.name, device_type: dev?.type_name, device_icon: dev?.icon };
+      }) || [];
+      const faultCount = deviceResults.filter(r => r.status === 'fault').length;
+      const warningCount = deviceResults.filter(r => r.status === 'warning').length;
+      return {
+        ...ins,
+        room_name: room?.name,
+        room_type: room?.type,
+        device_results: deviceResults,
+        fault_count: faultCount,
+        warning_count: warningCount
+      };
+    });
+
+  res.json({ success: true, data: result });
+});
+
+app.post('/api/inspections', (req, res) => {
+  const { room_id, inspector, items, remark } = req.body;
+  if (!room_id || !inspector || !items || !items.length) {
+    return res.status(400).json({ success: false, message: '缺少必要字段' });
+  }
+
+  const d = load();
+  const room = d.rooms.find(r => r.id === parseInt(room_id));
+  if (!room) return res.status(404).json({ success: false, message: '包间不存在' });
+
+  const id = nextId('inspections');
+  const now = new Date().toISOString();
+  const inspection = {
+    id,
+    room_id: parseInt(room_id),
+    inspector,
+    items,
+    remark: remark || '',
+    created_at: now
+  };
+  d.inspections.push(inspection);
+
+  const faultItems = items.filter(it => it.status === 'fault');
+  const faultIds = [];
+  faultItems.forEach(it => {
+    const fid = nextId('faults');
+    const dev = d.devices.find(dv => dv.id === it.device_id);
+    d.faults.push({
+      id: fid,
+      device_id: it.device_id,
+      inspection_id: id,
+      room_id: parseInt(room_id),
+      title: `${dev?.name || '设备'}故障`,
+      description: it.note || '巡检发现故障',
+      level: it.fault_level || 'medium',
+      reported_by: inspector,
+      status: 'pending',
+      created_at: now,
+      resolved_at: null
+    });
+    faultIds.push(fid);
+    if (dev) dev.status = 'fault';
+  });
+
+  items.forEach(it => {
+    const dev = d.devices.find(dv => dv.id === it.device_id);
+    if (dev) {
+      dev.last_inspection = now;
+      if (it.status === 'warning' && dev.status === 'normal') dev.status = 'warning';
+      if (it.status === 'normal' && dev.status === 'warning') dev.status = 'normal';
+    }
+  });
+
+  save();
+  res.json({ success: true, data: { id, fault_ids: faultIds } });
+});
+
+app.get('/api/inspections/:id', (req, res) => {
+  const d = load();
+  const ins = d.inspections.find(x => x.id === parseInt(req.params.id));
+  if (!ins) return res.status(404).json({ success: false, message: '巡检记录不存在' });
+
+  const room = d.rooms.find(r => r.id === ins.room_id);
+  const deviceResults = ins.items?.map(it => {
+    const dev = d.devices.find(dv => dv.id === it.device_id);
+    return { ...it, device_name: dev?.name, device_type: dev?.type_name, device_icon: dev?.icon };
+  }) || [];
+  const relatedFaults = d.faults.filter(f => f.inspection_id === ins.id);
+
+  res.json({
+    success: true,
+    data: {
+      ...ins,
+      room_name: room?.name,
+      device_results: deviceResults,
+      related_faults: relatedFaults
+    }
+  });
+});
+
+// ==================== 故障管理 ====================
+
+app.get('/api/faults', (req, res) => {
+  const { room_id, device_id, status, level } = req.query;
+  const d = load();
+  let faults = [...d.faults];
+
+  if (room_id) faults = faults.filter(f => f.room_id === parseInt(room_id));
+  if (device_id) faults = faults.filter(f => f.device_id === parseInt(device_id));
+  if (status) faults = faults.filter(f => f.status === status);
+  if (level) faults = faults.filter(f => f.level === level);
+
+  const result = faults
+    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+    .map(f => {
+      const dev = d.devices.find(dv => dv.id === f.device_id);
+      const room = d.rooms.find(r => r.id === f.room_id);
+      const repair = d.repairs.find(r => r.fault_id === f.id);
+      return {
+        ...f,
+        device_name: dev?.name,
+        device_type: dev?.type_name,
+        device_icon: dev?.icon,
+        room_name: room?.name,
+        repair_info: repair ? { id: repair.id, status: repair.status, repairer: repair.repairer } : null
+      };
+    });
+
+  res.json({ success: true, data: result });
+});
+
+app.post('/api/faults', (req, res) => {
+  const { device_id, room_id, title, description, level, reported_by } = req.body;
+  if (!device_id || !title) {
+    return res.status(400).json({ success: false, message: '缺少必要字段' });
+  }
+
+  const d = load();
+  const dev = d.devices.find(dv => dv.id === parseInt(device_id));
+  if (!dev) return res.status(404).json({ success: false, message: '设备不存在' });
+
+  const id = nextId('faults');
+  const now = new Date().toISOString();
+  const fault = {
+    id,
+    device_id: parseInt(device_id),
+    room_id: room_id ? parseInt(room_id) : dev.room_id,
+    inspection_id: null,
+    title,
+    description: description || '',
+    level: level || 'medium',
+    reported_by: reported_by || '系统',
+    status: 'pending',
+    created_at: now,
+    resolved_at: null
+  };
+  d.faults.push(fault);
+  dev.status = 'fault';
+  save();
+  res.json({ success: true, data: fault });
+});
+
+app.put('/api/faults/:id', (req, res) => {
+  const d = load();
+  const idx = d.faults.findIndex(x => x.id === parseInt(req.params.id));
+  if (idx === -1) return res.status(404).json({ success: false, message: '故障记录不存在' });
+
+  d.faults[idx] = { ...d.faults[idx], ...req.body, id: d.faults[idx].id };
+  save();
+  res.json({ success: true, message: '故障记录已更新' });
+});
+
+app.put('/api/faults/:id/status', (req, res) => {
+  const { status } = req.body;
+  const validStatuses = ['pending', 'processing', 'resolved', 'closed'];
+  if (!validStatuses.includes(status)) {
+    return res.status(400).json({ success: false, message: '无效状态' });
+  }
+  const d = load();
+  const idx = d.faults.findIndex(x => x.id === parseInt(req.params.id));
+  if (idx === -1) return res.status(404).json({ success: false, message: '故障记录不存在' });
+
+  d.faults[idx].status = status;
+  if (status === 'resolved') {
+    d.faults[idx].resolved_at = new Date().toISOString();
+    const dev = d.devices.find(dv => dv.id === d.faults[idx].device_id);
+    if (dev && dev.status === 'fault') {
+      const hasOtherFault = d.faults.some(f => f.device_id === dev.id && f.id !== d.faults[idx].id && !['resolved', 'closed'].includes(f.status));
+      if (!hasOtherFault) dev.status = 'normal';
+    }
+  }
+  save();
+  res.json({ success: true, message: '状态更新成功' });
+});
+
+// ==================== 维修记录 ====================
+
+app.get('/api/repairs', (req, res) => {
+  const { room_id, status, repairer } = req.query;
+  const d = load();
+  let repairs = [...d.repairs];
+
+  if (room_id) {
+    const rid = parseInt(room_id);
+    repairs = repairs.filter(r => {
+      const fault = d.faults.find(f => f.id === r.fault_id);
+      return fault?.room_id === rid;
+    });
+  }
+  if (status) repairs = repairs.filter(r => r.status === status);
+  if (repairer) repairs = repairs.filter(r => r.repairer?.includes(repairer));
+
+  const result = repairs
+    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+    .map(r => {
+      const fault = d.faults.find(f => f.id === r.fault_id);
+      const dev = d.devices.find(dv => dv.id === fault?.device_id);
+      const room = d.rooms.find(rm => rm.id === fault?.room_id);
+      return {
+        ...r,
+        fault_title: fault?.title,
+        fault_description: fault?.description,
+        fault_level: fault?.level,
+        device_name: dev?.name,
+        device_type: dev?.type_name,
+        device_icon: dev?.icon,
+        room_name: room?.name
+      };
+    });
+
+  res.json({ success: true, data: result });
+});
+
+app.post('/api/repairs', (req, res) => {
+  const { fault_id, repairer, repair_method, parts_used, cost, repair_note } = req.body;
+  if (!fault_id || !repairer || !repair_method) {
+    return res.status(400).json({ success: false, message: '缺少必要字段' });
+  }
+
+  const d = load();
+  const faultIdx = d.faults.findIndex(f => f.id === parseInt(fault_id));
+  if (faultIdx === -1) return res.status(404).json({ success: false, message: '故障记录不存在' });
+
+  const id = nextId('repairs');
+  const now = new Date().toISOString();
+  const repair = {
+    id,
+    fault_id: parseInt(fault_id),
+    repairer,
+    repair_method,
+    parts_used: parts_used || '',
+    cost: cost ? parseFloat(cost) : 0,
+    repair_note: repair_note || '',
+    status: 'completed',
+    created_at: now
+  };
+  d.repairs.push(repair);
+
+  d.faults[faultIdx].status = 'resolved';
+  d.faults[faultIdx].resolved_at = now;
+
+  const dev = d.devices.find(dv => dv.id === d.faults[faultIdx].device_id);
+  if (dev && dev.status === 'fault') {
+    const hasOtherFault = d.faults.some(f => f.device_id === dev.id && f.id !== d.faults[faultIdx].id && !['resolved', 'closed'].includes(f.status));
+    if (!hasOtherFault) dev.status = 'normal';
+  }
+
+  save();
+  res.json({ success: true, data: repair });
+});
+
+// ==================== 巡检统计 ====================
+
+app.get('/api/stats/inspection', (req, res) => {
+  const d = load();
+  const today = new Date();
+  const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+
+  const todayInspections = d.inspections.filter(i => new Date(i.created_at) >= todayStart);
+  const pendingFaults = d.faults.filter(f => !['resolved', 'closed'].includes(f.status));
+  const processingFaults = d.faults.filter(f => f.status === 'processing');
+  const totalRepairCost = d.repairs.reduce((s, r) => s + (r.cost || 0), 0);
+  const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+  const monthRepairCost = d.repairs
+    .filter(r => new Date(r.created_at) >= monthStart)
+    .reduce((s, r) => s + (r.cost || 0), 0);
+
+  const deviceStatusStats = {};
+  d.devices.forEach(dev => {
+    deviceStatusStats[dev.status] = (deviceStatusStats[dev.status] || 0) + 1;
+  });
+
+  const roomStats = d.rooms.map(r => {
+    const devs = d.devices.filter(dv => dv.room_id === r.id);
+    const normalCount = devs.filter(dv => dv.status === 'normal').length;
+    const faultCount = devs.filter(dv => dv.status === 'fault').length;
+    const warnCount = devs.filter(dv => dv.status === 'warning').length;
+    const recentInspection = d.inspections
+      .filter(i => i.room_id === r.id)
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0];
+    return {
+      room_id: r.id,
+      room_name: r.name,
+      total_devices: devs.length,
+      normal_count: normalCount,
+      fault_count: faultCount,
+      warning_count: warnCount,
+      last_inspection: recentInspection?.created_at || null,
+      inspector: recentInspection?.inspector || null
+    };
+  });
+
+  res.json({
+    success: true,
+    data: {
+      today_inspection_count: todayInspections.length,
+      total_inspections: d.inspections.length,
+      pending_faults: pendingFaults.length,
+      processing_faults: processingFaults.length,
+      total_devices: d.devices.length,
+      normal_devices: deviceStatusStats.normal || 0,
+      warning_devices: deviceStatusStats.warning || 0,
+      fault_devices: deviceStatusStats.fault || 0,
+      maintenance_devices: deviceStatusStats.maintenance || 0,
+      total_repair_cost: totalRepairCost,
+      month_repair_cost: monthRepairCost,
+      room_stats: roomStats
+    }
+  });
+});
+
 // ==================== 启动服务 ====================
 
 app.get('/', (req, res) => {

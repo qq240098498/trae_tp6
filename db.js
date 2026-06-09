@@ -9,12 +9,20 @@ const DEFAULT_DATA = {
   movies: [],
   reservations: [],
   transactions: [],
+  devices: [],
+  inspections: [],
+  faults: [],
+  repairs: [],
   _ids: {
     rooms: 0,
     movie_categories: 0,
     movies: 0,
     reservations: 0,
-    transactions: 0
+    transactions: 0,
+    devices: 0,
+    inspections: 0,
+    faults: 0,
+    repairs: 0
   }
 };
 
@@ -68,6 +76,40 @@ function initDefaultData() {
     data.rooms.push({ ...r, id, created_at: new Date().toISOString() });
   });
 
+  const deviceTypes = [
+    { type: 'projector', name: '投影机', icon: '📽️' },
+    { type: 'speaker', name: '音响系统', icon: '🔊' },
+    { type: 'ac', name: '空调', icon: '❄️' },
+    { type: 'light', name: '灯光系统', icon: '💡' },
+    { type: 'screen', name: '幕布', icon: '🎞️' },
+    { type: 'sofa', name: '沙发座椅', icon: '🛋️' }
+  ];
+  data.rooms.forEach(room => {
+    deviceTypes.forEach(dt => {
+      const devId = nextId('devices');
+      data.devices.push({
+        id: devId,
+        room_id: room.id,
+        name: `${room.name}-${dt.name}`,
+        type: dt.type,
+        type_name: dt.name,
+        icon: dt.icon,
+        brand: dt.type === 'projector' ? '爱普生' : dt.type === 'speaker' ? 'BOSE' : dt.type === 'ac' ? '格力' : dt.type === 'light' ? '飞利浦' : '-',
+        model: dt.type === 'projector' ? 'CB-X41' : dt.type === 'speaker' ? 'Acoustimass 6' : dt.type === 'ac' ? 'KFR-72LW' : dt.type === 'light' ? 'BR126' : '-',
+        purchase_date: new Date(Date.now() - Math.random() * 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        status: 'normal',
+        last_inspection: null,
+        remark: '',
+        created_at: new Date().toISOString()
+      });
+    });
+  });
+
+  console.log('初始化完成:');
+  console.log('  - 包间:', data.rooms.length);
+  console.log('  - 设备:', data.devices.length);
+  console.log('  - 分类:', data.movie_categories.length);
+  console.log('  - 影片:', data.movies.length);
   const categoryMap = {};
   const categories = [
     { name: '动作片', description: '刺激精彩的动作电影' },
