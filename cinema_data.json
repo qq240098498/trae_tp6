@@ -387,13 +387,93 @@
       "created_at": "2026-06-09T12:34:07.433Z"
     }
   ],
-  "reservations": [],
-  "transactions": [],
+  "reservations": [
+    {
+      "id": 1,
+      "room_id": 1,
+      "movie_id": 20,
+      "customer_name": "12",
+      "customer_phone": "123",
+      "start_time": "2026-06-09T13:11:00.000Z",
+      "end_time": "2026-06-09T15:11:00.000Z",
+      "status": "completed",
+      "total_amount": 1000,
+      "paid_amount": 1000,
+      "checkin_code": "F20EF2",
+      "checkin_time": "2026-06-09T12:41:52.262Z",
+      "checkout_time": "2026-06-09T12:42:19.287Z",
+      "remark": "123",
+      "created_at": "2026-06-09T12:41:47.697Z"
+    },
+    {
+      "id": 2,
+      "room_id": 1,
+      "movie_id": null,
+      "customer_name": "124",
+      "customer_phone": "4124",
+      "start_time": "2026-06-09T13:15:00.000Z",
+      "end_time": "2026-06-09T15:15:00.000Z",
+      "status": "completed",
+      "total_amount": 236,
+      "paid_amount": 236,
+      "checkin_code": "76F3FB",
+      "checkin_time": "2026-06-09T12:45:59.115Z",
+      "checkout_time": "2026-06-09T13:05:20.904Z",
+      "remark": "41241",
+      "created_at": "2026-06-09T12:45:13.379Z"
+    },
+    {
+      "id": 3,
+      "room_id": 2,
+      "movie_id": null,
+      "customer_name": "测试顾客",
+      "customer_phone": "13800138000",
+      "start_time": "2026-06-09T11:59:13.638Z",
+      "end_time": "2026-06-09T14:59:13.638Z",
+      "status": "completed",
+      "total_amount": 234,
+      "paid_amount": 234,
+      "checkin_code": "485D8D",
+      "checkin_time": "2026-06-09T12:59:13.653Z",
+      "checkout_time": "2026-06-09T12:59:13.659Z",
+      "remark": "测试",
+      "created_at": "2026-06-09T12:59:13.649Z"
+    }
+  ],
+  "transactions": [
+    {
+      "id": 1,
+      "reservation_id": 1,
+      "type": "payment",
+      "amount": 1000,
+      "payment_method": "cash",
+      "remark": "",
+      "created_at": "2026-06-09T12:42:19.287Z"
+    },
+    {
+      "id": 2,
+      "reservation_id": 3,
+      "type": "payment",
+      "amount": 234,
+      "payment_method": "wechat",
+      "remark": "",
+      "created_at": "2026-06-09T12:59:13.659Z"
+    },
+    {
+      "id": 3,
+      "reservation_id": 2,
+      "type": "payment",
+      "amount": 236,
+      "payment_method": "cash",
+      "remark": "",
+      "created_at": "2026-06-09T13:05:20.904Z"
+    }
+  ],
   "_ids": {
     "rooms": 9,
     "movie_categories": 8,
     "movies": 23,
-    "reservations": 0,
-    "transactions": 0
+    "reservations": 3,
+    "transactions": 3
   }
 }

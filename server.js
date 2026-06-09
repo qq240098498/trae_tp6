@@ -357,9 +357,12 @@ app.post('/api/checkout/:id', (req, res) => {
     : new Date(reservation.start_time);
 
   const actualHours = Math.max(1, Math.ceil((now - startTime) / (1000 * 60 * 60)));
-  const baseAmount = actualHours * room.price_per_hour;
+  const actualBaseAmount = actualHours * room.price_per_hour;
+  const bookedAmount = reservation.total_amount || 0;
   const extra = extra_charge ? parseFloat(extra_charge) : 0;
-  const discount = reservation.total_amount > baseAmount ? (reservation.total_amount - baseAmount) : 0;
+
+  const baseAmount = Math.max(actualBaseAmount, bookedAmount);
+  const discount = (bookedAmount > 0 && bookedAmount < actualBaseAmount) ? (actualBaseAmount - bookedAmount) : 0;
   const finalAmount = baseAmount + extra - discount;
   const unpaid = finalAmount - (reservation.paid_amount || 0);
 
@@ -391,11 +394,14 @@ app.post('/api/checkout/:id', (req, res) => {
     data: {
       id: reservation.id,
       actual_hours: actualHours,
+      actual_base_amount: actualBaseAmount,
+      booked_amount: bookedAmount,
       base_amount: baseAmount,
       extra_charge: extra,
       discount: discount,
       final_amount: finalAmount,
-      paid_amount: reservation.paid_amount - Math.max(0, unpaid),
+      already_paid: reservation.paid_amount || 0,
+      paid_amount: Math.max(0, unpaid),
       unpaid_amount: Math.max(0, unpaid)
     }
   });

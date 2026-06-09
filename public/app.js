@@ -799,6 +799,8 @@ async function loadCheckoutList() {
   ` : '<div class="empty-state"><div class="empty-state-icon">🎬</div>暂无观影中包间</div>';
 }
 
+let __checkoutCtx = null;
+
 async function showCheckoutModal(reservationId) {
   let r;
   if (reservationId) {
@@ -828,30 +830,43 @@ async function showCheckoutModal(reservationId) {
 
   const startTime = r.checkin_time ? new Date(r.checkin_time) : new Date(r.start_time);
   const hours = Math.max(1, Math.ceil((new Date() - startTime) / (1000 * 60 * 60)));
-  const base = hours * r.price_per_hour;
-  const discount = r.total_amount > base ? (r.total_amount - base) : 0;
-  const finalAmount = base - discount;
-  const unpaid = finalAmount - (r.paid_amount || 0);
+  const actualBase = hours * r.price_per_hour;
+  const bookedTotal = r.total_amount || 0;
+  const paid = r.paid_amount || 0;
+  const base = Math.max(actualBase, bookedTotal);
+  const discount = bookedTotal > 0 && bookedTotal < actualBase ? (actualBase - bookedTotal) : 0;
+  const subtotal = base - discount;
+  const unpaidBeforeExtra = subtotal - paid;
+
+  __checkoutCtx = {
+    base,
+    discount,
+    subtotal,
+    paid,
+    unpaidBeforeExtra
+  };
 
   showModal(`
     <div class="form-row">
-      <div class="form-group"><div class="form-label">包间</div><div style="font-size:16px;font-weight:600">${r.room_name}</div></div>
-      <div class="form-group"><div class="form-label">顾客</div><div>${r.customer_name} ${r.customer_phone}</div></div>
+      <div class="form-group"><div class="form-label">包间</div><div style="font-size:16px;font-weight:600">${r.room_name} (${r.room_type})</div></div>
+      <div class="form-group"><div class="form-label">顾客</div><div>${r.customer_name} · ${r.customer_phone}</div></div>
     </div>
     <div class="settlement-summary">
-      <div class="settlement-row"><span>入场时间</span><strong>${fmtDT(r.checkin_time || r.start_time)}</strong></div>
-      <div class="settlement-row"><span>当前时间</span><strong>${fmtDT(new Date())}</strong></div>
-      <div class="settlement-row"><span>实际时长</span><strong>${hours} 小时</strong></div>
-      <div class="settlement-row"><span>包间单价</span>${fmtMoney(r.price_per_hour)} / 小时</div>
-      <div class="settlement-row"><span>基础费用 (${hours}h × ${fmtMoney(r.price_per_hour)})</span>${fmtMoney(base)}</div>
-      ${discount > 0 ? `<div class="settlement-row" style="color:var(--success)"><span>折扣调整</span>- ${fmtMoney(discount)}</div>` : ''}
-      <div class="settlement-row"><span>已付金额</span style="color:var(--success);font-weight:600">- ${fmtMoney(r.paid_amount || 0)}</div>
-      <div class="settlement-row total"><span>应付金额</span>${fmtMoney(Math.max(0, unpaid))}</div>
+      <div class="settlement-row"><span>入场时间</span><span>${fmtDT(r.checkin_time || r.start_time)}</span></div>
+      <div class="settlement-row"><span>当前时间</span><span>${fmtDT(new Date())}</span></div>
+      <div class="settlement-row"><span>实际观影时长</span><span style="font-weight:700;color:var(--primary)">${hours} 小时</span></div>
+      <div class="settlement-row"><span>包间单价</span><span>${fmtMoney(r.price_per_hour)} / 小时</span></div>
+      <div class="settlement-row"><span>按实际时长计费 (${hours}h × ${fmtMoney(r.price_per_hour)})</span><span>${fmtMoney(actualBase)}</span></div>
+      <div class="settlement-row"><span>预约时预估费用</span><span>${fmtMoney(bookedTotal)}</span></div>
+      ${discount > 0 ? `<div class="settlement-row" style="color:var(--success)"><span>优惠减免 (按预约价计)</span><span>- ${fmtMoney(discount)}</span></div>` : ''}
+      <div class="settlement-row"><span>费用小计</span><span style="font-weight:600">${fmtMoney(subtotal)}</span></div>
+      <div class="settlement-row"><span>已支付金额</span><span style="color:var(--success);font-weight:600">- ${fmtMoney(paid)}</span></div>
+      <div class="settlement-row total"><span>本次应付金额</span><span>${fmtMoney(Math.max(0, unpaidBeforeExtra))}</span></div>
     </div>
     <div class="form-row">
       <div class="form-group">
         <label class="form-label">额外收费 (小吃、饮料等)</label>
-        <input class="form-input" id="extra_charge" type="number" min="0" value="0" oninput="updateCheckoutTotal()">
+        <input class="form-input" id="extra_charge" type="number" min="0" step="0.01" value="0" oninput="updateCheckoutTotal()">
       </div>
       <div class="form-group">
         <label class="form-label">支付方式</label>
@@ -868,7 +883,7 @@ async function showCheckoutModal(reservationId) {
       <label class="form-label">备注</label>
       <input class="form-input" id="co_remark" placeholder="如有特殊情况请备注...">
     </div>
-    <div id="checkoutFinal" style="font-size:20px;text-align:center;padding:14px;background:linear-gradient(135deg,#fef3c7,#fde68a);border-radius:10px;margin-bottom:16px;font-weight:700;color:#92400e"></div>
+    <div id="checkoutFinal" style="font-size:22px;text-align:center;padding:18px;background:linear-gradient(135deg,#fef3c7,#fde68a);border-radius:12px;margin-bottom:16px;font-weight:800;color:#92400e;letter-spacing:1px"></div>
     ${modalFooter([
       { text: '取消', onclick: 'closeModal()' },
       { text: '确认结算', class: 'btn-danger', onclick: `submitCheckout(${r.id})` }
@@ -878,24 +893,19 @@ async function showCheckoutModal(reservationId) {
 }
 
 function updateCheckoutTotal() {
-  const extra = parseFloat(document.getElementById('extra_charge').value) || 0;
-  const summary = document.querySelector('.settlement-summary');
+  const extra = parseFloat(document.getElementById('extra_charge')?.value) || 0;
   const finalDiv = document.getElementById('checkoutFinal');
-  if (!summary || !finalDiv) return;
+  if (!__checkoutCtx || !finalDiv) return;
 
-  const rows = summary.querySelectorAll('.settlement-row');
-  let total = 0;
-  rows.forEach(row => {
-    const txt = row.querySelector('span:last-child').textContent;
-    const match = txt.match(/¥([\d.]+)/);
-    if (match) {
-      const val = parseFloat(match[1]);
-      if (txt.includes('-')) total -= val;
-      else total += val;
-    }
-  });
-  total += extra;
-  finalDiv.textContent = `最终应付: ${fmtMoney(Math.max(0, total))}`;
+  const { base, discount, subtotal, paid, unpaidBeforeExtra } = __checkoutCtx;
+  const finalTotal = subtotal + extra - paid;
+
+  let breakdown = `费用 ${fmtMoney(subtotal)}`;
+  if (extra > 0) breakdown += ` + 附加 ${fmtMoney(extra)}`;
+  if (paid > 0) breakdown += ` - 已付 ${fmtMoney(paid)}`;
+
+  finalDiv.textContent = `最终应付: ${fmtMoney(Math.max(0, finalTotal))}`;
+  finalDiv.title = breakdown;
 }
 
 async function submitCheckout(id) {
@@ -906,12 +916,19 @@ async function submitCheckout(id) {
   };
   const result = await request(`${API}/checkout/${id}`, { method: 'POST', body: data });
   if (result) {
-    showToast(`结算成功！实收 ${fmtMoney(result.unpaid_amount)}，感谢惠顾！`, 'success');
+    const d = result;
+    let detail = `实收 ${fmtMoney(d.unpaid_amount)}`;
+    if (d.discount && d.discount > 0) detail += `，优惠 ${fmtMoney(d.discount)}`;
+    if (d.extra_charge && d.extra_charge > 0) detail += `，附加 ${fmtMoney(d.extra_charge)}`;
+    detail += `。共消费 ${d.actual_hours} 小时`;
+    showToast(`✅ 结算成功！${detail}，感谢惠顾！`, 'success');
+    __checkoutCtx = null;
     closeModal();
     if (currentPage === 'checkout') loadCheckoutList();
     else if (currentPage === 'rooms') renderRooms();
     else if (currentPage === 'reservations') renderResvList();
     else if (currentPage === 'dashboard') renderDashboard();
+    else if (currentPage === 'transactions') renderTransactions();
   }
 }
 
