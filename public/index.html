@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>星幕私人影吧 - 运营系统</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="logo">
+        <div class="logo-icon">🎬</div>
+        <div>
+          <h1>星幕影吧</h1>
+          <p class="logo-sub">运营管理系统</p>
+        </div>
+      </div>
+      <nav class="menu">
+        <a class="menu-item active" data-page="dashboard">
+          <span class="menu-icon">📊</span>运营总览
+        </a>
+        <a class="menu-item" data-page="rooms">
+          <span class="menu-icon">🚪</span>包间状态
+        </a>
+        <a class="menu-item" data-page="movies">
+          <span class="menu-icon">🎞️</span>影片库
+        </a>
+        <a class="menu-item" data-page="reservations">
+          <span class="menu-icon">📅</span>预约排期
+        </a>
+        <a class="menu-item" data-page="checkin">
+          <span class="menu-icon">✅</span>到店核验
+        </a>
+        <a class="menu-item" data-page="checkout">
+          <span class="menu-icon">💰</span>消费结算
+        </a>
+        <a class="menu-item" data-page="transactions">
+          <span class="menu-icon">📋</span>交易记录
+        </a>
+      </nav>
+      <div class="sidebar-footer">
+        <p class="time-display" id="currentTime"></p>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="header">
+        <h2 id="pageTitle">运营总览</h2>
+        <div class="header-actions">
+          <button class="btn btn-primary" id="quickBookBtn">
+            ➕ 快速预约
+          </button>
+        </div>
+      </header>
+
+      <div id="pageContent"></div>
+    </main>
+  </div>
+
+  <!-- 模态框容器 -->
+  <div id="modalContainer"></div>
+  <!-- Toast 提示 -->
+  <div id="toastContainer"></div>
+
+  <script src="/app.js"></script>
+</body>
+</html>

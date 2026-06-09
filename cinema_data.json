@@ -1,0 +1,399 @@
+{
+  "rooms": [
+    {
+      "name": "A101",
+      "type": "情侣小包",
+      "capacity": 2,
+      "price_per_hour": 68,
+      "status": "idle",
+      "id": 1,
+      "created_at": "2026-06-09T12:34:07.418Z"
+    },
+    {
+      "name": "A102",
+      "type": "情侣小包",
+      "capacity": 2,
+      "price_per_hour": 68,
+      "status": "idle",
+      "id": 2,
+      "created_at": "2026-06-09T12:34:07.419Z"
+    },
+    {
+      "name": "A103",
+      "type": "情侣小包",
+      "capacity": 2,
+      "price_per_hour": 68,
+      "status": "idle",
+      "id": 3,
+      "created_at": "2026-06-09T12:34:07.419Z"
+    },
+    {
+      "name": "B201",
+      "type": "商务中包",
+      "capacity": 4,
+      "price_per_hour": 128,
+      "status": "idle",
+      "id": 4,
+      "created_at": "2026-06-09T12:34:07.419Z"
+    },
+    {
+      "name": "B202",
+      "type": "商务中包",
+      "capacity": 4,
+      "price_per_hour": 128,
+      "status": "idle",
+      "id": 5,
+      "created_at": "2026-06-09T12:34:07.419Z"
+    },
+    {
+      "name": "B203",
+      "type": "商务中包",
+      "capacity": 6,
+      "price_per_hour": 158,
+      "status": "idle",
+      "id": 6,
+      "created_at": "2026-06-09T12:34:07.420Z"
+    },
+    {
+      "name": "C301",
+      "type": "豪华大包",
+      "capacity": 10,
+      "price_per_hour": 298,
+      "status": "idle",
+      "id": 7,
+      "created_at": "2026-06-09T12:34:07.420Z"
+    },
+    {
+      "name": "C302",
+      "type": "豪华大包",
+      "capacity": 10,
+      "price_per_hour": 298,
+      "status": "idle",
+      "id": 8,
+      "created_at": "2026-06-09T12:34:07.420Z"
+    },
+    {
+      "name": "D401",
+      "type": "VIP派对包",
+      "capacity": 20,
+      "price_per_hour": 588,
+      "status": "idle",
+      "id": 9,
+      "created_at": "2026-06-09T12:34:07.421Z"
+    }
+  ],
+  "movie_categories": [
+    {
+      "name": "动作片",
+      "description": "刺激精彩的动作电影",
+      "id": 1,
+      "created_at": "2026-06-09T12:34:07.422Z"
+    },
+    {
+      "name": "爱情片",
+      "description": "浪漫温馨的爱情故事",
+      "id": 2,
+      "created_at": "2026-06-09T12:34:07.422Z"
+    },
+    {
+      "name": "科幻片",
+      "description": "想象力丰富的科幻大作",
+      "id": 3,
+      "created_at": "2026-06-09T12:34:07.423Z"
+    },
+    {
+      "name": "喜剧片",
+      "description": "轻松搞笑的喜剧电影",
+      "id": 4,
+      "created_at": "2026-06-09T12:34:07.423Z"
+    },
+    {
+      "name": "恐怖片",
+      "description": "惊悚刺激的恐怖电影",
+      "id": 5,
+      "created_at": "2026-06-09T12:34:07.424Z"
+    },
+    {
+      "name": "动画片",
+      "description": "老少皆宜的动画佳作",
+      "id": 6,
+      "created_at": "2026-06-09T12:34:07.424Z"
+    },
+    {
+      "name": "纪录片",
+      "description": "真实记录的纪录片",
+      "id": 7,
+      "created_at": "2026-06-09T12:34:07.424Z"
+    },
+    {
+      "name": "经典老片",
+      "description": "永不过时的经典作品",
+      "id": 8,
+      "created_at": "2026-06-09T12:34:07.425Z"
+    }
+  ],
+  "movies": [
+    {
+      "id": 1,
+      "title": "速度与激情10",
+      "category_id": 1,
+      "duration": 141,
+      "rating": 8.5,
+      "description": "多米尼克·托莱多带领他的家人面对迄今为止最致命的对手。",
+      "release_year": 2023,
+      "poster_url": null,
+      "created_at": "2026-06-09T12:34:07.425Z"
+    },
+    {
+      "id": 2,
+      "title": "碟中谍7",
+      "category_id": 1,
+      "duration": 163,
+      "rating": 8.8,
+      "description": "伊森·亨特和他的IMF团队开始寻找一种会威胁全人类生存的可怕武器。",
+      "release_year": 2023,
+      "poster_url": null,
+      "created_at": "2026-06-09T12:34:07.425Z"
+    },
+    {
+      "id": 3,
+      "title": "长津湖",
+      "category_id": 1,
+      "duration": 176,
+      "rating": 9.5,
+      "description": "抗美援朝战争中长津湖战役的壮烈故事。",
+      "release_year": 2021,
+      "poster_url": null,
+      "created_at": "2026-06-09T12:34:07.426Z"
+    },
+    {
+      "id": 4,
+      "title": "泰坦尼克号",
+      "category_id": 2,
+      "duration": 195,
+      "rating": 9.4,
+      "description": "一段发生在泰坦尼克号上的跨阶级爱情故事。",
+      "release_year": 1997,
+      "poster_url": null,
+      "created_at": "2026-06-09T12:34:07.426Z"
+    },
+    {
+      "id": 5,
+      "title": "爱在黎明破晓前",
+      "category_id": 2,
+      "duration": 101,
+      "rating": 8.8,
+      "description": "一对陌生男女在维也纳度过浪漫的一天。",
+      "release_year": 1995,
+      "poster_url": null,
+      "created_at": "2026-06-09T12:34:07.426Z"
+    },
+    {
+      "id": 6,
+      "title": "你的婚礼",
+      "category_id": 2,
+      "duration": 115,
+      "rating": 7.8,
+      "description": "一段跨越青春的校园爱情故事。",
+      "release_year": 2021,
+      "poster_url": null,
+      "created_at": "2026-06-09T12:34:07.427Z"
+    },
+    {
+      "id": 7,
+      "title": "星际穿越",
+      "category_id": 3,
+      "duration": 169,
+      "rating": 9.4,
+      "description": "一组探险家穿越虫洞寻找人类新家园的史诗冒险。",
+      "release_year": 2014,
+      "poster_url": null,
+      "created_at": "2026-06-09T12:34:07.427Z"
+    },
+    {
+      "id": 8,
+      "title": "流浪地球2",
+      "category_id": 3,
+      "duration": 173,
+      "rating": 9,
+      "description": "太阳即将毁灭，人类开启移山计划拯救地球。",
+      "release_year": 2023,
+      "poster_url": null,
+      "created_at": "2026-06-09T12:34:07.428Z"
+    },
+    {
+      "id": 9,
+      "title": "盗梦空间",
+      "category_id": 3,
+      "duration": 148,
+      "rating": 9.3,
+      "description": "进入他人梦境窃取机密的科幻冒险。",
+      "release_year": 2010,
+      "poster_url": null,
+      "created_at": "2026-06-09T12:34:07.428Z"
+    },
+    {
+      "id": 10,
+      "title": "夏洛特烦恼",
+      "category_id": 4,
+      "duration": 104,
+      "rating": 8.9,
+      "description": "穿越回学生时代的爆笑喜剧。",
+      "release_year": 2015,
+      "poster_url": null,
+      "created_at": "2026-06-09T12:34:07.428Z"
+    },
+    {
+      "id": 11,
+      "title": "西虹市首富",
+      "category_id": 4,
+      "duration": 118,
+      "rating": 8.5,
+      "description": "一个月花光十亿的爆笑挑战。",
+      "release_year": 2018,
+      "poster_url": null,
+      "created_at": "2026-06-09T12:34:07.429Z"
+    },
+    {
+      "id": 12,
+      "title": "你好，李焕英",
+      "category_id": 4,
+      "duration": 128,
+      "rating": 8.8,
+      "description": "穿越回妈妈年轻时代的温喜剧。",
+      "release_year": 2021,
+      "poster_url": null,
+      "created_at": "2026-06-09T12:34:07.429Z"
+    },
+    {
+      "id": 13,
+      "title": "午夜凶铃",
+      "category_id": 5,
+      "duration": 116,
+      "rating": 8.2,
+      "description": "看过神秘录像带的人七天后死亡的恐怖传说。",
+      "release_year": 1998,
+      "poster_url": null,
+      "created_at": "2026-06-09T12:34:07.430Z"
+    },
+    {
+      "id": 14,
+      "title": "招魂",
+      "category_id": 5,
+      "duration": 112,
+      "rating": 8,
+      "description": "真实事件改编的超自然恐怖故事。",
+      "release_year": 2013,
+      "poster_url": null,
+      "created_at": "2026-06-09T12:34:07.430Z"
+    },
+    {
+      "id": 15,
+      "title": "釜山行",
+      "category_id": 5,
+      "duration": 118,
+      "rating": 8.6,
+      "description": "丧尸病毒爆发下列车上的生死逃亡。",
+      "release_year": 2016,
+      "poster_url": null,
+      "created_at": "2026-06-09T12:34:07.430Z"
+    },
+    {
+      "id": 16,
+      "title": "千与千寻",
+      "category_id": 6,
+      "duration": 125,
+      "rating": 9.4,
+      "description": "少女千寻在神秘神灵世界的冒险。",
+      "release_year": 2001,
+      "poster_url": null,
+      "created_at": "2026-06-09T12:34:07.431Z"
+    },
+    {
+      "id": 17,
+      "title": "疯狂动物城",
+      "category_id": 6,
+      "duration": 109,
+      "rating": 9.2,
+      "description": "兔子警官与狐狸搭档破案的故事。",
+      "release_year": 2016,
+      "poster_url": null,
+      "created_at": "2026-06-09T12:34:07.431Z"
+    },
+    {
+      "id": 18,
+      "title": "哪吒之魔童降世",
+      "category_id": 6,
+      "duration": 110,
+      "rating": 8.9,
+      "description": "我命由我不由天的哪吒传奇。",
+      "release_year": 2019,
+      "poster_url": null,
+      "created_at": "2026-06-09T12:34:07.431Z"
+    },
+    {
+      "id": 19,
+      "title": "地球脉动",
+      "category_id": 7,
+      "duration": 480,
+      "rating": 9.9,
+      "description": "BBC经典自然纪录片系列。",
+      "release_year": 2006,
+      "poster_url": null,
+      "created_at": "2026-06-09T12:34:07.432Z"
+    },
+    {
+      "id": 20,
+      "title": "人间世",
+      "category_id": 7,
+      "duration": 600,
+      "rating": 9.6,
+      "description": "记录医院里的人生百态。",
+      "release_year": 2016,
+      "poster_url": null,
+      "created_at": "2026-06-09T12:34:07.432Z"
+    },
+    {
+      "id": 21,
+      "title": "霸王别姬",
+      "category_id": 8,
+      "duration": 171,
+      "rating": 9.6,
+      "description": "两个京剧伶人半个世纪的悲欢离合。",
+      "release_year": 1993,
+      "poster_url": null,
+      "created_at": "2026-06-09T12:34:07.432Z"
+    },
+    {
+      "id": 22,
+      "title": "肖申克的救赎",
+      "category_id": 8,
+      "duration": 142,
+      "rating": 9.7,
+      "description": "银行家在肖申克监狱的希望与自由。",
+      "release_year": 1994,
+      "poster_url": null,
+      "created_at": "2026-06-09T12:34:07.433Z"
+    },
+    {
+      "id": 23,
+      "title": "阿甘正传",
+      "category_id": 8,
+      "duration": 142,
+      "rating": 9.5,
+      "description": "一个智商不高的男人的传奇人生。",
+      "release_year": 1994,
+      "poster_url": null,
+      "created_at": "2026-06-09T12:34:07.433Z"
+    }
+  ],
+  "reservations": [],
+  "transactions": [],
+  "_ids": {
+    "rooms": 9,
+    "movie_categories": 8,
+    "movies": 23,
+    "reservations": 0,
+    "transactions": 0
+  }
+}
