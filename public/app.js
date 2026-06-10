@@ -1365,42 +1365,218 @@ async function submitCheckout(id) {
 
 // ==================== 交易记录 ====================
 
+let transactionFilters = {
+  type: 'all',
+  payment_method: 'all',
+  start_date: '',
+  end_date: '',
+  keyword: '',
+  min_amount: '',
+  max_amount: ''
+};
+
+function transactionTypeText(type) {
+  const map = {
+    payment: '收款',
+    wallet_payment: '余额支付',
+    recharge: '会员充值',
+    level_up: '会员升级',
+    refund: '退款'
+  };
+  return map[type] || type;
+}
+
+function transactionTypeBadgeClass(type) {
+  const map = {
+    payment: 'completed',
+    wallet_payment: 'checked_in',
+    recharge: 'booked',
+    level_up: 'maintenance',
+    refund: 'cancelled'
+  };
+  return map[type] || 'booked';
+}
+
+function paymentMethodText(method) {
+  const map = {
+    cash: '现金',
+    wechat: '微信',
+    alipay: '支付宝',
+    card: '刷卡',
+    member_wallet: '会员余额',
+    package: '充值套餐',
+    manual: '手动充值',
+    signup_bonus: '开户赠送',
+    system: '系统'
+  };
+  return map[method] || method;
+}
+
+async function loadTransactionTypes() {
+  return await request(`${API}/transactions/types`);
+}
+
+async function loadTransactions() {
+  const params = new URLSearchParams();
+  if (transactionFilters.type && transactionFilters.type !== 'all') {
+    params.append('type', transactionFilters.type);
+  }
+  if (transactionFilters.payment_method && transactionFilters.payment_method !== 'all') {
+    params.append('payment_method', transactionFilters.payment_method);
+  }
+  if (transactionFilters.start_date) params.append('start_date', transactionFilters.start_date);
+  if (transactionFilters.end_date) params.append('end_date', transactionFilters.end_date);
+  if (transactionFilters.keyword) params.append('keyword', transactionFilters.keyword);
+  if (transactionFilters.min_amount) params.append('min_amount', transactionFilters.min_amount);
+  if (transactionFilters.max_amount) params.append('max_amount', transactionFilters.max_amount);
+
+  const url = `${API}/transactions${params.toString() ? '?' + params.toString() : ''}`;
+  return await request(url);
+}
+
 async function renderTransactions() {
   setActivePage('transactions', '交易记录');
-  const list = await request(`${API}/transactions`);
-  if (!list) return;
+  const [typesData, data] = await Promise.all([loadTransactionTypes(), loadTransactions()]);
+  if (!data) return;
 
-  const total = list.filter(t => t.type === 'payment').reduce((s, t) => s + t.amount, 0);
+  const { list, summary } = data;
+  const { types, payment_methods } = typesData || { types: [], payment_methods: [] };
 
   document.getElementById('pageContent').innerHTML = `
-    <div class="stats-grid" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr))">
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-header"><h3>🔍 搜索筛选</h3></div>
+      <div class="card-body">
+        <div class="filter-grid">
+          <div class="filter-item">
+            <label>交易类型</label>
+            <select id="filterType" onchange="applyTransactionFilter('type', this.value)">
+              ${types.map(t => `<option value="${t.value}" ${transactionFilters.type === t.value ? 'selected' : ''}>${t.icon} ${t.label}</option>`).join('')}
+            </select>
+          </div>
+          <div class="filter-item">
+            <label>支付方式</label>
+            <select id="filterPaymentMethod" onchange="applyTransactionFilter('payment_method', this.value)">
+              ${payment_methods.map(m => `<option value="${m.value}" ${transactionFilters.payment_method === m.value ? 'selected' : ''}>${m.label}</option>`).join('')}
+            </select>
+          </div>
+          <div class="filter-item">
+            <label>开始日期</label>
+            <input type="date" id="filterStartDate" value="${transactionFilters.start_date}" onchange="applyTransactionFilter('start_date', this.value)">
+          </div>
+          <div class="filter-item">
+            <label>结束日期</label>
+            <input type="date" id="filterEndDate" value="${transactionFilters.end_date}" onchange="applyTransactionFilter('end_date', this.value)">
+          </div>
+          <div class="filter-item">
+            <label>最低金额</label>
+            <input type="number" id="filterMinAmount" placeholder="0.00" value="${transactionFilters.min_amount}" onchange="applyTransactionFilter('min_amount', this.value)">
+          </div>
+          <div class="filter-item">
+            <label>最高金额</label>
+            <input type="number" id="filterMaxAmount" placeholder="不限" value="${transactionFilters.max_amount}" onchange="applyTransactionFilter('max_amount', this.value)">
+          </div>
+          <div class="filter-item" style="grid-column:span 2">
+            <label>关键词搜索（会员姓名/手机号/客户/套餐/备注）</label>
+            <input type="text" id="filterKeyword" placeholder="输入关键词搜索..." value="${transactionFilters.keyword}" onkeyup="if(event.key==='Enter')applyTransactionFilter('keyword', this.value)">
+          </div>
+          <div class="filter-item" style="grid-column:span 2;display:flex;gap:8px;align-items:flex-end">
+            <button class="btn btn-primary" onclick="applyTransactionFilter('keyword', document.getElementById('filterKeyword').value)">🔍 搜索</button>
+            <button class="btn btn-outline" onclick="resetTransactionFilters()">🔄 重置</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="stats-grid" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr));margin-bottom:16px">
       <div class="stat-card orange">
         <div class="stat-label">交易总金额</div>
-        <div class="stat-value" style="color:#f59e0b">${fmtMoney(total)}</div>
+        <div class="stat-value" style="color:#f59e0b">${fmtMoney(summary?.total_amount || 0)}</div>
         <div class="stat-icon">💰</div>
       </div>
       <div class="stat-card blue">
         <div class="stat-label">交易笔数</div>
-        <div class="stat-value">${list.length}<span class="stat-unit">笔</span></div>
+        <div class="stat-value">${summary?.total_count || 0}<span class="stat-unit">笔</span></div>
         <div class="stat-icon">📋</div>
       </div>
+      <div class="stat-card green">
+        <div class="stat-label">收款总额</div>
+        <div class="stat-value" style="color:var(--success)">${fmtMoney(summary?.total_payment || 0)}</div>
+        <div class="stat-icon">💵</div>
+      </div>
+      <div class="stat-card purple">
+        <div class="stat-label">会员充值</div>
+        <div class="stat-value" style="color:var(--primary)">${fmtMoney(summary?.total_recharge || 0)}</div>
+        <div class="stat-icon">💳</div>
+      </div>
+      <div class="stat-card" style="background:linear-gradient(135deg,#f0abfc,#c084fc)">
+        <div class="stat-label">余额支付</div>
+        <div class="stat-value" style="color:#fff">${fmtMoney(summary?.total_wallet_payment || 0)}</div>
+        <div class="stat-icon">👛</div>
+      </div>
     </div>
+
+    ${summary?.type_stats && Object.keys(summary.type_stats).length > 0 ? `
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-header"><h3>📊 类型统计</h3></div>
+      <div class="card-body">
+        <div class="stats-grid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));margin:0">
+          ${Object.entries(summary.type_stats).map(([type, stat]) => `
+            <div class="stat-card" style="padding:12px;background:var(--bg-secondary)">
+              <div class="stat-label" style="font-size:12px">${transactionTypeText(type)}</div>
+              <div class="stat-value" style="font-size:18px">${stat.count}笔</div>
+              <div style="font-size:14px;color:var(--success);font-weight:600">${fmtMoney(stat.amount)}</div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    </div>
+    ` : ''}
+
     <div class="card">
       ${list.length ? `
         <table class="data-table">
           <thead><tr>
-            <th>时间</th><th>类型</th><th>关联订单</th><th>包间</th>
-            <th>顾客</th><th>金额</th><th>支付方式</th><th>备注</th>
+            <th>时间</th>
+            <th>类型</th>
+            <th>金额</th>
+            <th>会员信息</th>
+            <th>关联订单</th>
+            <th>包间</th>
+            <th>顾客</th>
+            <th>支付方式</th>
+            <th>赠送/套餐</th>
+            <th>备注</th>
           </tr></thead>
           <tbody>
             ${list.map(t => `<tr>
               <td>${fmtDT(t.created_at)}</td>
-              <td><span class="badge badge-${t.type === 'payment' ? 'completed' : 'booked'}">${t.type === 'payment' ? '收款' : t.type}</span></td>
-              <td>#${t.reservation_id || '-'}</td>
+              <td><span class="badge badge-${transactionTypeBadgeClass(t.type)}">${transactionTypeText(t.type)}</span></td>
+              <td style="color:${t.type === 'refund' ? 'var(--danger)' : 'var(--success)'};font-weight:700">${t.type === 'refund' ? '-' : '+'}${fmtMoney(t.amount)}</td>
+              <td>
+                ${t.member_name ? `
+                  <div style="font-weight:600">${t.member_level_icon || ''} ${t.member_name}</div>
+                  <div style="font-size:12px;color:var(--text-muted)">${t.member_phone || ''}</div>
+                  <div style="font-size:11px;color:var(--primary)">${t.member_level_name || ''}</div>
+                ` : '<span style="color:var(--text-muted)">散客</span>'}
+              </td>
+              <td>${t.reservation_id ? `<a href="javascript:void(0)" onclick="showReservationDetail(${t.reservation_id})" style="color:var(--primary)">#${t.reservation_id}</a>` : '-'}</td>
               <td>${t.room_name || '-'}</td>
-              <td>${t.customer_name || '-'}</td>
-              <td style="color:var(--success);font-weight:700">${fmtMoney(t.amount)}</td>
-              <td>${t.payment_method || '-'}</td>
+              <td>
+                ${t.customer_name ? `
+                  <div>${t.customer_name}</div>
+                  <div style="font-size:12px;color:var(--text-muted)">${t.customer_phone || ''}</div>
+                ` : '-'}
+              </td>
+              <td>${paymentMethodText(t.payment_method) || '-'}</td>
+              <td>
+                ${t.package_name ? `
+                  <div style="font-weight:600">${t.package_name}</div>
+                  ${t.gift_amount > 0 ? `<div style="font-size:12px;color:var(--success)">赠送: ${fmtMoney(t.gift_amount)}</div>` : ''}
+                  ${t.free_hours > 0 ? `<div style="font-size:12px;color:var(--primary)">赠时: ${t.free_hours}小时</div>` : ''}
+                ` : t.new_level_name ? `
+                  <div style="color:var(--warning);font-weight:600">⬆️ ${t.new_level_name}</div>
+                ` : '-'}
+              </td>
               <td>${t.remark || '-'}</td>
             </tr>`).join('')}
           </tbody>
@@ -1408,6 +1584,100 @@ async function renderTransactions() {
       ` : '<div class="empty-state"><div class="empty-state-icon">💳</div>暂无交易记录</div>'}
     </div>
   `;
+}
+
+function applyTransactionFilter(key, value) {
+  transactionFilters[key] = value;
+  renderTransactions();
+}
+
+function resetTransactionFilters() {
+  transactionFilters = {
+    type: 'all',
+    payment_method: 'all',
+    start_date: '',
+    end_date: '',
+    keyword: '',
+    min_amount: '',
+    max_amount: ''
+  };
+  renderTransactions();
+}
+
+async function showReservationDetail(id) {
+  const data = await request(`${API}/reservations/${id}`);
+  if (!data) return;
+
+  const content = `
+    <div class="detail-grid">
+      <div class="detail-item">
+        <label>订单号</label>
+        <div>#${data.id}</div>
+      </div>
+      <div class="detail-item">
+        <label>状态</label>
+        <div><span class="badge badge-${data.status}">${statusText(data.status)}</span></div>
+      </div>
+      <div class="detail-item">
+        <label>包间</label>
+        <div>${data.room_name} (${data.room_type})</div>
+      </div>
+      <div class="detail-item">
+        <label>影片</label>
+        <div>${data.movie_title || '未选片'}</div>
+      </div>
+      <div class="detail-item">
+        <label>客户姓名</label>
+        <div>${data.customer_name}</div>
+      </div>
+      <div class="detail-item">
+        <label>联系电话</label>
+        <div>${data.customer_phone}</div>
+      </div>
+      <div class="detail-item">
+        <label>预约时间</label>
+        <div>${fmtDT(data.start_time)} - ${fmtTime(data.end_time)}</div>
+      </div>
+      <div class="detail-item">
+        <label>消费金额</label>
+        <div style="color:var(--success);font-weight:700;font-size:18px">${fmtMoney(data.total_amount || 0)}</div>
+      </div>
+      ${data.member_discount > 0 ? `
+      <div class="detail-item">
+        <label>会员优惠</label>
+        <div style="color:var(--primary)">-${fmtMoney(data.member_discount)}</div>
+      </div>
+      ` : ''}
+      <div class="detail-item">
+        <label>已付金额</label>
+        <div>${fmtMoney(data.paid_amount || 0)}</div>
+      </div>
+    </div>
+
+    ${data.transactions && data.transactions.length > 0 ? `
+    <div style="margin-top:16px">
+      <h4 style="margin-bottom:8px">💳 支付记录</h4>
+      <table class="data-table">
+        <thead><tr>
+          <th>时间</th><th>类型</th><th>金额</th><th>支付方式</th><th>备注</th>
+        </tr></thead>
+        <tbody>
+          ${data.transactions.map(t => `
+          <tr>
+            <td>${fmtDT(t.created_at)}</td>
+            <td><span class="badge badge-${transactionTypeBadgeClass(t.type)}">${transactionTypeText(t.type)}</span></td>
+            <td style="color:var(--success);font-weight:600">${fmtMoney(t.amount)}</td>
+            <td>${paymentMethodText(t.payment_method) || '-'}</td>
+            <td>${t.remark || '-'}</td>
+          </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+    ` : ''}
+  `;
+
+  showModal(content, `订单详情 #${data.id}`, true);
 }
 
 // ==================== 辅助函数扩展 ====================

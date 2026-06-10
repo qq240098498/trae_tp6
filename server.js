@@ -713,6 +713,7 @@ app.post('/api/checkout/:id', async (req, res) => {
         d.transactions.push({
           id: txId,
           reservation_id: reservation.id,
+          member_id: resMemberId,
           type: 'payment',
           amount: Math.max(0, unpaid),
           payment_method: payment_method || 'cash',
@@ -726,6 +727,7 @@ app.post('/api/checkout/:id', async (req, res) => {
         d.transactions.push({
           id: txId,
           reservation_id: reservation.id,
+          member_id: resMemberId,
           type: 'wallet_payment',
           amount: walletPayment,
           payment_method: 'member_wallet',
@@ -750,6 +752,7 @@ app.post('/api/checkout/:id', async (req, res) => {
 
         const newLevel = getMemberLevel(d, member.total_points);
         if (newLevel && newLevel.id !== member.level_id) {
+          const oldLevelId = member.level_id;
           member.level_id = newLevel.id;
           const logId = nextId('member_wallet_logs');
           d.member_wallet_logs.push({
@@ -763,6 +766,21 @@ app.post('/api/checkout/:id', async (req, res) => {
             description: `升级到${newLevel.name}`,
             operator: '系统',
             related_id: null,
+            created_at: now.toISOString()
+          });
+
+          const txId = nextId('transactions');
+          d.transactions.push({
+            id: txId,
+            reservation_id: reservation.id,
+            member_id: member.id,
+            type: 'level_up',
+            amount: 0,
+            payment_method: 'system',
+            old_level_id: oldLevelId,
+            new_level_id: newLevel.id,
+            new_level_name: newLevel.name,
+            remark: `会员升级到${newLevel.name}`,
             created_at: now.toISOString()
           });
         }
@@ -852,7 +870,7 @@ app.post('/api/reservations/:id/cancel', async (req, res) => {
 // ==================== 交易记录 ====================
 
 app.get('/api/transactions', (req, res) => {
-  const { date, type } = req.query;
+  const { date, start_date, end_date, type, member_id, payment_method, min_amount, max_amount, keyword } = req.query;
   const d = load();
   let transactions = [...d.transactions];
 
@@ -865,24 +883,125 @@ app.get('/api/transactions', (req, res) => {
              td.getDate() === ds.getDate();
     });
   }
+
+  if (start_date) {
+    const sd = new Date(start_date);
+    transactions = transactions.filter(t => new Date(t.created_at) >= sd);
+  }
+
+  if (end_date) {
+    const ed = new Date(end_date);
+    ed.setDate(ed.getDate() + 1);
+    transactions = transactions.filter(t => new Date(t.created_at) < ed);
+  }
+
   if (type) {
-    transactions = transactions.filter(t => t.type === type);
+    const typeList = type.split(',').map(t => t.trim());
+    transactions = transactions.filter(t => typeList.includes(t.type));
+  }
+
+  if (member_id) {
+    const mid = parseInt(member_id);
+    transactions = transactions.filter(t => t.member_id === mid);
+  }
+
+  if (payment_method) {
+    transactions = transactions.filter(t => t.payment_method === payment_method);
+  }
+
+  if (min_amount) {
+    transactions = transactions.filter(t => t.amount >= parseFloat(min_amount));
+  }
+
+  if (max_amount) {
+    transactions = transactions.filter(t => t.amount <= parseFloat(max_amount));
+  }
+
+  if (keyword) {
+    const kw = String(keyword).toLowerCase();
+    transactions = transactions.filter(t => {
+      const member = t.member_id ? d.members.find(m => m.id === t.member_id) : null;
+      const reservation = t.reservation_id ? d.reservations.find(r => r.id === t.reservation_id) : null;
+      const pkg = t.package_id ? d.member_packages.find(p => p.id === t.package_id) : null;
+      return (
+        (member?.name.toLowerCase().includes(kw)) ||
+        (member?.phone.includes(kw)) ||
+        (reservation?.customer_name.toLowerCase().includes(kw)) ||
+        (reservation?.customer_phone.includes(kw)) ||
+        (pkg?.name.toLowerCase().includes(kw)) ||
+        (t.remark && t.remark.toLowerCase().includes(kw))
+      );
+    });
   }
 
   const result = transactions
     .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-    .slice(0, 200)
+    .slice(0, 500)
     .map(t => {
       const r = d.reservations.find(x => x.id === t.reservation_id);
       const room = r ? d.rooms.find(x => x.id === r.room_id) : null;
+      const member = t.member_id ? d.members.find(m => m.id === t.member_id) : null;
+      const memberLevel = member ? d.member_levels.find(l => l.id === member.level_id) : null;
+      const pkg = t.package_id ? d.member_packages.find(p => p.id === t.package_id) : null;
       return {
         ...t,
         customer_name: r?.customer_name,
-        room_name: room?.name
+        customer_phone: r?.customer_phone,
+        room_name: room?.name,
+        room_type: room?.type,
+        member_name: member?.name,
+        member_phone: member?.phone,
+        member_level_name: memberLevel?.name,
+        member_level_icon: memberLevel?.icon,
+        package_name: pkg?.name,
+        package_gift_desc: pkg?.gift_desc
       };
     });
 
-  res.json({ success: true, data: result });
+  const summary = {
+    total_count: result.length,
+    total_amount: result.filter(t => t.type === 'payment' || t.type === 'wallet_payment' || t.type === 'recharge').reduce((s, t) => s + t.amount, 0),
+    total_recharge: result.filter(t => t.type === 'recharge').reduce((s, t) => s + t.amount, 0),
+    total_payment: result.filter(t => t.type === 'payment').reduce((s, t) => s + t.amount, 0),
+    total_wallet_payment: result.filter(t => t.type === 'wallet_payment').reduce((s, t) => s + t.amount, 0),
+    type_stats: {}
+  };
+
+  result.forEach(t => {
+    if (!summary.type_stats[t.type]) {
+      summary.type_stats[t.type] = { count: 0, amount: 0 };
+    }
+    summary.type_stats[t.type].count++;
+    summary.type_stats[t.type].amount += t.amount;
+  });
+
+  res.json({ success: true, data: { list: result, summary } });
+});
+
+app.get('/api/transactions/types', (req, res) => {
+  const types = [
+    { value: 'all', label: '全部类型', icon: '📊' },
+    { value: 'payment', label: '收款', icon: '💵' },
+    { value: 'wallet_payment', label: '余额支付', icon: '👛' },
+    { value: 'recharge', label: '会员充值', icon: '💳' },
+    { value: 'level_up', label: '会员升级', icon: '⬆️' },
+    { value: 'refund', label: '退款', icon: '↩️' }
+  ];
+
+  const paymentMethods = [
+    { value: 'all', label: '全部方式' },
+    { value: 'cash', label: '现金' },
+    { value: 'wechat', label: '微信' },
+    { value: 'alipay', label: '支付宝' },
+    { value: 'card', label: '刷卡' },
+    { value: 'member_wallet', label: '会员余额' },
+    { value: 'package', label: '充值套餐' },
+    { value: 'manual', label: '手动充值' },
+    { value: 'signup_bonus', label: '开户赠送' },
+    { value: 'system', label: '系统' }
+  ];
+
+  res.json({ success: true, data: { types, payment_methods: paymentMethods } });
 });
 
 // ==================== 统计数据 ====================
@@ -2244,6 +2363,22 @@ app.post('/api/members', (req, res) => {
       related_id: null,
       created_at: now
     });
+
+    const txId = nextId('transactions');
+    d.transactions.push({
+      id: txId,
+      reservation_id: null,
+      member_id: memberId,
+      type: 'recharge',
+      amount: initBal,
+      gift_amount: 0,
+      free_hours: 0,
+      payment_method: 'signup_bonus',
+      package_id: null,
+      wallet_log_id: logId,
+      remark: '开户赠送',
+      created_at: now
+    });
   }
 
   save();
@@ -2346,6 +2481,22 @@ app.post('/api/members/:id/recharge', (req, res) => {
     description: desc,
     operator: '管理员',
     related_id: package_id ? parseInt(package_id) : null,
+    created_at: now
+  });
+
+  const txId = nextId('transactions');
+  d.transactions.push({
+    id: txId,
+    reservation_id: null,
+    member_id: memberId,
+    type: 'recharge',
+    amount: realAmount,
+    gift_amount: realGift,
+    free_hours: realFreeHours,
+    payment_method: package_id ? 'package' : 'manual',
+    package_id: package_id ? parseInt(package_id) : null,
+    wallet_log_id: logId,
+    remark: desc,
     created_at: now
   });
 
