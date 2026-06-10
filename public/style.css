@@ -1007,3 +1007,67 @@ body {
   line-height: 1.4;
 }
 
+/* 紧急修复标识 */
+.urgent-badge {
+  position: absolute;
+  top: -8px;
+  left: -4px;
+  z-index: 10;
+  padding: 4px 12px;
+  background: linear-gradient(135deg, #dc2626, #b91c1c);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 6px;
+  box-shadow: 0 4px 8px rgba(220,38,38,0.3);
+  animation: urgent-flash 1.5s ease-in-out infinite;
+  transform: rotate(-3deg);
+}
+@keyframes urgent-flash {
+  0%,100% { transform: rotate(-3deg) scale(1); box-shadow: 0 4px 8px rgba(220,38,38,0.3); }
+  50% { transform: rotate(-3deg) scale(1.06); box-shadow: 0 6px 14px rgba(220,38,38,0.5); }
+}
+
+.room-card.urgent-card {
+  animation: urgent-card-pulse 2.5s ease-in-out infinite;
+  border-color: #fca5a5 !important;
+}
+@keyframes urgent-card-pulse {
+  0%,100% { box-shadow: 0 0 0 0 rgba(220,38,38,0.08); }
+  50% { box-shadow: 0 0 0 6px rgba(220,38,38,0.14); }
+}
+
+/* 预约列表：系统取消相关样式 */
+.row-system-cancelled {
+  background: linear-gradient(90deg, #fff7ed 0%, transparent 30%) !important;
+}
+.sys-cancel-tag {
+  display: inline-block;
+  margin-top: 2px;
+  padding: 1px 6px;
+  background: #fee2e2;
+  color: #b91c1c;
+  font-size: 10px;
+  border-radius: 4px;
+  font-weight: 600;
+}
+.cancel-reason {
+  margin-top: 6px;
+  padding: 6px 8px;
+  background: linear-gradient(135deg, #fef2f2, #fff7ed);
+  border-left: 3px solid #ef4444;
+  border-radius: 4px;
+  font-size: 11px;
+  color: #991b1b;
+  line-height: 1.4;
+  max-width: 340px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: help;
+}
+.cancel-reason:hover {
+  white-space: normal;
+}
+
+

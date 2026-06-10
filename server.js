@@ -3,7 +3,7 @@ const bodyParser = require('body-parser');
 const cors = require('cors');
 const path = require('path');
 const crypto = require('crypto');
-const { load, save, nextId } = require('./db');
+const { load, save, nextId, transaction, roomTransaction, findTimeConflict, countRoomCheckedIn, countOverlappingCheckedIn } = require('./db');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -60,6 +60,15 @@ app.get('/api/rooms', (req, res) => {
     );
     const warningDevices = d.devices.filter(dv => dv.room_id === room.id && dv.status === 'warning');
 
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const recentCancelled = d.reservations.filter(r =>
+      r.room_id === room.id &&
+      r.status === 'cancelled' &&
+      r.cancelled_by === 'system' &&
+      new Date(r.cancelled_at || 0) > yesterday
+    );
+
     return {
       ...room,
       active_reservation: activeResv,
@@ -67,7 +76,11 @@ app.get('/api/rooms', (req, res) => {
       pending_fault_level: pendingFaults.some(f => f.level === 'high') ? 'high' :
                            pendingFaults.some(f => f.level === 'medium') ? 'medium' :
                            pendingFaults.some(f => f.level === 'low') ? 'low' : null,
-      warning_device_count: warningDevices.length
+      warning_device_count: warningDevices.length,
+      system_cancelled_24h: recentCancelled.length,
+      urgent_attention: pendingFaults.length > 0 && (
+        pendingFaults.some(f => f.level === 'high') || recentCancelled.length > 0
+      )
     };
   });
 
@@ -90,7 +103,35 @@ app.get('/api/rooms/:id', (req, res) => {
       return { ...r, movie_title: movie?.title || null };
     });
 
-  res.json({ success: true, data: { ...room, reservations: futureResvs } });
+  const pendingFaults = d.faults.filter(f =>
+    f.room_id === room.id && !['resolved', 'closed'].includes(f.status)
+  );
+  const warningDevices = d.devices.filter(dv => dv.room_id === room.id && dv.status === 'warning');
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  const recentCancelled = d.reservations.filter(r =>
+    r.room_id === room.id &&
+    r.status === 'cancelled' &&
+    r.cancelled_by === 'system' &&
+    new Date(r.cancelled_at || 0) > yesterday
+  );
+
+  res.json({
+    success: true,
+    data: {
+      ...room,
+      reservations: futureResvs,
+      pending_fault_count: pendingFaults.length,
+      pending_fault_level: pendingFaults.some(f => f.level === 'high') ? 'high' :
+                           pendingFaults.some(f => f.level === 'medium') ? 'medium' :
+                           pendingFaults.some(f => f.level === 'low') ? 'low' : null,
+      warning_device_count: warningDevices.length,
+      system_cancelled_24h: recentCancelled.length,
+      urgent_attention: pendingFaults.length > 0 && (
+        pendingFaults.some(f => f.level === 'high') || recentCancelled.length > 0
+      )
+    }
+  });
 });
 
 app.put('/api/rooms/:id/status', (req, res) => {
@@ -222,7 +263,7 @@ app.get('/api/reservations', (req, res) => {
   res.json({ success: true, data: result });
 });
 
-app.post('/api/reservations', (req, res) => {
+app.post('/api/reservations', async (req, res) => {
   const {
     room_id, movie_id, customer_name, customer_phone,
     start_time, end_time, remark
@@ -238,84 +279,107 @@ app.post('/api/reservations', (req, res) => {
     return res.status(400).json({ success: false, message: '结束时间必须晚于开始时间' });
   }
 
-  const d = load();
   const roomId = parseInt(room_id);
 
-  const conflict = d.reservations.find(r => {
-    if (r.room_id !== roomId) return false;
-    if (!['booked', 'checked_in'].includes(r.status)) return false;
-    const rs = new Date(r.start_time);
-    const re = new Date(r.end_time);
-    return (start < re && end > rs);
-  });
+  try {
+    const result = await roomTransaction(roomId, async (d) => {
+      const conflict = findTimeConflict(d, roomId, start, end);
+      if (conflict) {
+        const conflictStartTime = new Date(conflict.start_time);
+        const conflictEndTime = new Date(conflict.end_time);
+        return {
+          httpStatus: 400,
+          success: false,
+          message: `该时间段包间已被预约（${conflictStartTime.toLocaleString()} - ${conflictEndTime.toLocaleString()}，客户：${conflict.customer_name}），请选择其他时间段`,
+          data: { conflict_id: conflict.id }
+        };
+      }
 
-  if (conflict) {
-    return res.status(400).json({ success: false, message: '该时间段包间已被预约' });
-  }
+      const room = d.rooms.find(r => r.id === roomId);
+      if (!room) {
+        return { httpStatus: 404, success: false, message: '包间不存在' };
+      }
 
-  const room = d.rooms.find(r => r.id === roomId);
-  if (!room) return res.status(404).json({ success: false, message: '包间不存在' });
+      const pendingFaults = d.faults.filter(f =>
+        f.room_id === roomId && !['resolved', 'closed'].includes(f.status)
+      );
 
-  const pendingFaults = d.faults.filter(f =>
-    f.room_id === roomId && !['resolved', 'closed'].includes(f.status)
-  );
+      if (pendingFaults.length > 0) {
+        const highCount = pendingFaults.filter(f => f.level === 'high').length;
+        const medCount = pendingFaults.filter(f => f.level === 'medium').length;
+        const lowCount = pendingFaults.filter(f => f.level === 'low').length;
+        const levelDesc = [
+          highCount ? `高${highCount}` : null,
+          medCount ? `中${medCount}` : null,
+          lowCount ? `低${lowCount}` : null
+        ].filter(Boolean).join('/');
+        return {
+          httpStatus: 400,
+          success: false,
+          message: `该包间当前存在${pendingFaults.length}项未解决设备故障（${levelDesc}级），为确保观影体验，暂不接受预约。请先处理设备故障后再预约。`,
+          data: { fault_count: pendingFaults.length }
+        };
+      }
 
-  if (pendingFaults.length > 0) {
-    const highCount = pendingFaults.filter(f => f.level === 'high').length;
-    const medCount = pendingFaults.filter(f => f.level === 'medium').length;
-    const lowCount = pendingFaults.filter(f => f.level === 'low').length;
-    const levelDesc = [
-      highCount ? `高${highCount}` : null,
-      medCount ? `中${medCount}` : null,
-      lowCount ? `低${lowCount}` : null
-    ].filter(Boolean).join('/');
-    return res.status(400).json({
-      success: false,
-      message: `该包间当前存在${pendingFaults.length}项未解决设备故障（${levelDesc}级），为确保观影体验，暂不接受预约。请先处理设备故障后再预约。`,
-      data: { fault_count: pendingFaults.length }
+      if (room.status === 'maintenance') {
+        return {
+          httpStatus: 400,
+          success: false,
+          message: '该包间当前处于维护中，暂不接受预约，请选择其他包间或稍后再试。'
+        };
+      }
+
+      if (room.status === 'occupied') {
+        const activeCheckin = countRoomCheckedIn(d, roomId);
+        if (activeCheckin > 0) {
+          return {
+            httpStatus: 400,
+            success: false,
+            message: `该包间当前有${activeCheckin}个场次正在使用中，请选择其他时间段或包间`
+          };
+        }
+      }
+
+      const hours = Math.ceil((end - start) / (1000 * 60 * 60));
+      const total_amount = hours * room.price_per_hour;
+      const checkin_code = generateCheckinCode();
+      const id = nextId('reservations');
+
+      const reservation = {
+        id,
+        room_id: roomId,
+        movie_id: movie_id ? parseInt(movie_id) : null,
+        customer_name,
+        customer_phone,
+        start_time: start.toISOString(),
+        end_time: end.toISOString(),
+        status: 'booked',
+        total_amount,
+        paid_amount: 0,
+        checkin_code,
+        checkin_time: null,
+        checkout_time: null,
+        remark: remark || '',
+        created_at: new Date().toISOString()
+      };
+      d.reservations.push(reservation);
+
+      return {
+        httpStatus: 200,
+        success: true,
+        data: { id, checkin_code, total_amount }
+      };
     });
-  }
 
-  if (room.status === 'maintenance') {
-    return res.status(400).json({
-      success: false,
-      message: '该包间当前处于维护中，暂不接受预约，请选择其他包间或稍后再试。'
+    res.status(result.httpStatus || 200).json({
+      success: result.success,
+      message: result.message,
+      data: result.data
     });
+  } catch (err) {
+    console.error('创建预约异常:', err);
+    res.status(500).json({ success: false, message: '服务器内部错误，请稍后重试' });
   }
-
-  if (room.status === 'occupied') {
-    return res.status(400).json({ success: false, message: '该包间当前正在使用中，请选择其他时间段或包间' });
-  }
-
-  const hours = Math.ceil((end - start) / (1000 * 60 * 60));
-  const total_amount = hours * room.price_per_hour;
-  const checkin_code = generateCheckinCode();
-  const id = nextId('reservations');
-
-  const reservation = {
-    id,
-    room_id: roomId,
-    movie_id: movie_id ? parseInt(movie_id) : null,
-    customer_name,
-    customer_phone,
-    start_time: start.toISOString(),
-    end_time: end.toISOString(),
-    status: 'booked',
-    total_amount,
-    paid_amount: 0,
-    checkin_code,
-    checkin_time: null,
-    checkout_time: null,
-    remark: remark || '',
-    created_at: new Date().toISOString()
-  };
-  d.reservations.push(reservation);
-  save();
-
-  res.json({
-    success: true,
-    data: { id, checkin_code, total_amount }
-  });
 });
 
 app.get('/api/reservations/:id', (req, res) => {
@@ -344,127 +408,251 @@ app.get('/api/reservations/:id', (req, res) => {
 
 // ==================== 到店核验 ====================
 
-app.post('/api/checkin', (req, res) => {
+app.post('/api/checkin', async (req, res) => {
   const { checkin_code, reservation_id } = req.body;
-  const d = load();
+  let targetReservation = null;
+  const d0 = load();
 
-  let reservation;
   if (checkin_code) {
-    reservation = d.reservations.find(r => r.checkin_code === checkin_code);
+    targetReservation = d0.reservations.find(r => r.checkin_code === checkin_code);
   } else if (reservation_id) {
-    reservation = d.reservations.find(r => r.id === parseInt(reservation_id));
+    targetReservation = d0.reservations.find(r => r.id === parseInt(reservation_id));
   }
 
-  if (!reservation) {
+  if (!targetReservation) {
     return res.status(404).json({ success: false, message: '预约信息不存在' });
   }
-  if (reservation.status === 'checked_in') {
-    return res.status(400).json({ success: false, message: '已办理入住' });
+
+  const roomId = targetReservation.room_id;
+  const reservationId = targetReservation.id;
+
+  try {
+    const result = await roomTransaction(roomId, async (d) => {
+      const reservation = d.reservations.find(r => r.id === reservationId);
+      if (!reservation) {
+        return { httpStatus: 404, success: false, message: '预约信息不存在' };
+      }
+
+      if (reservation.status === 'checked_in') {
+        return { httpStatus: 400, success: false, message: '已办理入住，请勿重复核销' };
+      }
+      if (reservation.status === 'completed' || reservation.status === 'cancelled') {
+        return { httpStatus: 400, success: false, message: '预约已完成或已取消，无法核销' };
+      }
+
+      const now = new Date();
+      const startTime = new Date(reservation.start_time);
+      const endTime = new Date(reservation.end_time);
+
+      if (now < new Date(startTime.getTime() - 30 * 60 * 1000)) {
+        const allowTime = new Date(startTime.getTime() - 30 * 60 * 1000);
+        return {
+          httpStatus: 400,
+          success: false,
+          message: `尚未到提前30分钟的入场时间，最早可核销时间：${allowTime.toLocaleString()}`
+        };
+      }
+
+      if (now > new Date(endTime.getTime() + 30 * 60 * 1000)) {
+        return {
+          httpStatus: 400,
+          success: false,
+          message: '预约已超时超过30分钟，无法核销，请取消后重新预约或联系管理员'
+        };
+      }
+
+      const activeCheckedIn = countOverlappingCheckedIn(d, roomId, startTime, endTime, reservationId);
+      if (activeCheckedIn > 0) {
+        return {
+          httpStatus: 400,
+          success: false,
+          message: `包间核销异常：该时间段内已有${activeCheckedIn}个场次正在使用，存在超核风险，请先确认包间实际使用情况后再操作`,
+          data: { overcheck_count: activeCheckedIn }
+        };
+      }
+
+      const totalActive = countRoomCheckedIn(d, roomId);
+      if (totalActive > 0) {
+        return {
+          httpStatus: 400,
+          success: false,
+          message: `包间当前有${totalActive}个场次正在使用中，无法再次核销，请确认包间是否已结算退房`,
+          data: { active_count: totalActive }
+        };
+      }
+
+      const conflict = findTimeConflict(d, roomId, startTime, endTime, reservationId);
+      if (conflict && conflict.status === 'checked_in') {
+        return {
+          httpStatus: 400,
+          success: false,
+          message: `该时间段包间已有核销记录（订单号：${conflict.id}，客户：${conflict.customer_name}），存在超核风险`,
+          data: { conflict_id: conflict.id }
+        };
+      }
+
+      reservation.status = 'checked_in';
+      reservation.checkin_time = now.toISOString();
+
+      const room = d.rooms.find(r => r.id === reservation.room_id);
+      if (room) room.status = 'occupied';
+
+      return {
+        httpStatus: 200,
+        success: true,
+        message: '核验成功，欢迎光临',
+        data: { id: reservation.id }
+      };
+    });
+
+    res.status(result.httpStatus || 200).json({
+      success: result.success,
+      message: result.message,
+      data: result.data
+    });
+  } catch (err) {
+    console.error('核销异常:', err);
+    res.status(500).json({ success: false, message: '服务器内部错误，请稍后重试' });
   }
-  if (reservation.status === 'completed' || reservation.status === 'cancelled') {
-    return res.status(400).json({ success: false, message: '预约已完成或已取消' });
-  }
-
-  const now = new Date();
-  const startTime = new Date(reservation.start_time);
-  if (now < new Date(startTime.getTime() - 30 * 60 * 1000)) {
-    return res.status(400).json({ success: false, message: '尚未到提前30分钟的入场时间' });
-  }
-
-  reservation.status = 'checked_in';
-  reservation.checkin_time = now.toISOString();
-
-  const room = d.rooms.find(r => r.id === reservation.room_id);
-  if (room) room.status = 'occupied';
-  save();
-
-  res.json({ success: true, message: '核验成功，欢迎光临', data: { id: reservation.id } });
 });
 
 // ==================== 消费结算 ====================
 
-app.post('/api/checkout/:id', (req, res) => {
+app.post('/api/checkout/:id', async (req, res) => {
   const { payment_method, extra_charge, remark } = req.body;
-  const d = load();
-  const reservation = d.reservations.find(r => r.id === parseInt(req.params.id));
-
-  if (!reservation) return res.status(404).json({ success: false, message: '预约不存在' });
-  if (reservation.status === 'completed' || reservation.status === 'cancelled') {
-    return res.status(400).json({ success: false, message: '订单已结算或已取消' });
+  const reservationId = parseInt(req.params.id);
+  let targetRoomId = null;
+  const d0 = load();
+  const tmpResv = d0.reservations.find(r => r.id === reservationId);
+  if (!tmpResv) {
+    return res.status(404).json({ success: false, message: '预约不存在' });
   }
+  targetRoomId = tmpResv.room_id;
 
-  const room = d.rooms.find(r => r.id === reservation.room_id);
-  if (!room) return res.status(400).json({ success: false, message: '包间数据异常' });
+  try {
+    const result = await roomTransaction(targetRoomId, async (d) => {
+      const reservation = d.reservations.find(r => r.id === reservationId);
+      if (!reservation) {
+        return { httpStatus: 404, success: false, message: '预约不存在' };
+      }
+      if (reservation.status === 'completed' || reservation.status === 'cancelled') {
+        return { httpStatus: 400, success: false, message: '订单已结算或已取消' };
+      }
 
-  const now = new Date();
-  const startTime = reservation.checkin_time
-    ? new Date(reservation.checkin_time)
-    : new Date(reservation.start_time);
+      const room = d.rooms.find(r => r.id === reservation.room_id);
+      if (!room) {
+        return { httpStatus: 400, success: false, message: '包间数据异常' };
+      }
 
-  const actualHours = Math.max(1, Math.ceil((now - startTime) / (1000 * 60 * 60)));
-  const actualBaseAmount = actualHours * room.price_per_hour;
-  const bookedAmount = reservation.total_amount || 0;
-  const extra = extra_charge ? parseFloat(extra_charge) : 0;
+      const now = new Date();
+      const startTime = reservation.checkin_time
+        ? new Date(reservation.checkin_time)
+        : new Date(reservation.start_time);
 
-  const baseAmount = Math.max(actualBaseAmount, bookedAmount);
-  const discount = (bookedAmount > 0 && bookedAmount < actualBaseAmount) ? (actualBaseAmount - bookedAmount) : 0;
-  const finalAmount = baseAmount + extra - discount;
-  const unpaid = finalAmount - (reservation.paid_amount || 0);
+      const actualHours = Math.max(1, Math.ceil((now - startTime) / (1000 * 60 * 60)));
+      const actualBaseAmount = actualHours * room.price_per_hour;
+      const bookedAmount = reservation.total_amount || 0;
+      const extra = extra_charge ? parseFloat(extra_charge) : 0;
 
-  if (unpaid > 0) {
-    const txId = nextId('transactions');
-    d.transactions.push({
-      id: txId,
-      reservation_id: reservation.id,
-      type: 'payment',
-      amount: Math.max(0, unpaid),
-      payment_method: payment_method || 'cash',
-      remark: remark || '',
-      created_at: now.toISOString()
+      const baseAmount = Math.max(actualBaseAmount, bookedAmount);
+      const discount = (bookedAmount > 0 && bookedAmount < actualBaseAmount) ? (actualBaseAmount - bookedAmount) : 0;
+      const finalAmount = baseAmount + extra - discount;
+      const unpaid = finalAmount - (reservation.paid_amount || 0);
+
+      if (unpaid > 0) {
+        const txId = nextId('transactions');
+        d.transactions.push({
+          id: txId,
+          reservation_id: reservation.id,
+          type: 'payment',
+          amount: Math.max(0, unpaid),
+          payment_method: payment_method || 'cash',
+          remark: remark || '',
+          created_at: now.toISOString()
+        });
+      }
+
+      reservation.status = 'completed';
+      reservation.checkout_time = now.toISOString();
+      reservation.paid_amount = (reservation.paid_amount || 0) + Math.max(0, unpaid);
+      reservation.total_amount = finalAmount;
+      if (remark) reservation.remark = remark;
+
+      const remainingCheckedIn = d.reservations.filter(r =>
+        r.room_id === reservation.room_id &&
+        r.status === 'checked_in' &&
+        r.id !== reservation.id
+      ).length;
+
+      if (remainingCheckedIn === 0) {
+        room.status = 'idle';
+      }
+
+      return {
+        httpStatus: 200,
+        success: true,
+        message: '结算完成',
+        data: {
+          id: reservation.id,
+          actual_hours: actualHours,
+          actual_base_amount: actualBaseAmount,
+          booked_amount: bookedAmount,
+          base_amount: baseAmount,
+          extra_charge: extra,
+          discount: discount,
+          final_amount: finalAmount,
+          already_paid: reservation.paid_amount || 0,
+          paid_amount: Math.max(0, unpaid),
+          unpaid_amount: Math.max(0, unpaid)
+        }
+      };
     });
+
+    res.status(result.httpStatus || 200).json({
+      success: result.success,
+      message: result.message,
+      data: result.data
+    });
+  } catch (err) {
+    console.error('结算异常:', err);
+    res.status(500).json({ success: false, message: '服务器内部错误，请稍后重试' });
   }
-
-  reservation.status = 'completed';
-  reservation.checkout_time = now.toISOString();
-  reservation.paid_amount = (reservation.paid_amount || 0) + Math.max(0, unpaid);
-  reservation.total_amount = finalAmount;
-  if (remark) reservation.remark = remark;
-
-  room.status = 'idle';
-  save();
-
-  res.json({
-    success: true,
-    message: '结算完成',
-    data: {
-      id: reservation.id,
-      actual_hours: actualHours,
-      actual_base_amount: actualBaseAmount,
-      booked_amount: bookedAmount,
-      base_amount: baseAmount,
-      extra_charge: extra,
-      discount: discount,
-      final_amount: finalAmount,
-      already_paid: reservation.paid_amount || 0,
-      paid_amount: Math.max(0, unpaid),
-      unpaid_amount: Math.max(0, unpaid)
-    }
-  });
 });
 
-app.post('/api/reservations/:id/cancel', (req, res) => {
-  const d = load();
-  const reservation = d.reservations.find(r => r.id === parseInt(req.params.id));
-  if (!reservation) return res.status(404).json({ success: false, message: '预约不存在' });
-  if (reservation.status === 'checked_in') {
-    return res.status(400).json({ success: false, message: '已入住，不可取消，请办理结算' });
+app.post('/api/reservations/:id/cancel', async (req, res) => {
+  const reservationId = parseInt(req.params.id);
+  let targetRoomId = null;
+  const d0 = load();
+  const tmpResv = d0.reservations.find(r => r.id === reservationId);
+  if (!tmpResv) {
+    return res.status(404).json({ success: false, message: '预约不存在' });
   }
-  if (reservation.status !== 'booked') {
-    return res.status(400).json({ success: false, message: '当前状态不可取消' });
+  targetRoomId = tmpResv.room_id;
+
+  try {
+    const result = await roomTransaction(targetRoomId, async (d) => {
+      const reservation = d.reservations.find(r => r.id === reservationId);
+      if (!reservation) {
+        return { httpStatus: 404, success: false, message: '预约不存在' };
+      }
+      if (reservation.status === 'checked_in') {
+        return { httpStatus: 400, success: false, message: '已入住，不可取消，请办理结算' };
+      }
+      if (reservation.status !== 'booked') {
+        return { httpStatus: 400, success: false, message: '当前状态不可取消' };
+      }
+      reservation.status = 'cancelled';
+      return { httpStatus: 200, success: true, message: '预约已取消' };
+    });
+
+    res.status(result.httpStatus || 200).json({
+      success: result.success,
+      message: result.message
+    });
+  } catch (err) {
+    console.error('取消预约异常:', err);
+    res.status(500).json({ success: false, message: '服务器内部错误，请稍后重试' });
   }
-  reservation.status = 'cancelled';
-  save();
-  res.json({ success: true, message: '预约已取消' });
 });
 
 // ==================== 交易记录 ====================
@@ -789,8 +977,17 @@ app.post('/api/inspections', (req, res) => {
   }
 
   save();
-  refreshRoomStatus(parseInt(room_id));
-  res.json({ success: true, data: { id, fault_ids: faultIds, room_locked: faultItems.length > 0 } });
+  const autoRes = refreshRoomStatus(parseInt(room_id));
+  res.json({
+    success: true,
+    data: {
+      id,
+      fault_ids: faultIds,
+      room_locked: faultItems.length > 0,
+      auto_cancelled_count: autoRes.cancelled,
+      auto_cancelled: autoRes.cancelled_details
+    }
+  });
 });
 
 app.get('/api/inspections/:id', (req, res) => {
@@ -882,8 +1079,15 @@ app.post('/api/faults', (req, res) => {
   }
 
   save();
-  refreshRoomStatus(rid);
-  res.json({ success: true, data: fault });
+  const autoRes2 = refreshRoomStatus(rid);
+  res.json({
+    success: true,
+    data: {
+      ...fault,
+      auto_cancelled_count: autoRes2.cancelled,
+      auto_cancelled: autoRes2.cancelled_details
+    }
+  });
 });
 
 app.put('/api/faults/:id', (req, res) => {
@@ -921,8 +1125,13 @@ app.put('/api/faults/:id/status', (req, res) => {
     }
   }
   save();
-  refreshRoomStatus(d.faults[idx].room_id);
-  res.json({ success: true, message: '状态更新成功' });
+  const autoRes3 = refreshRoomStatus(d.faults[idx].room_id);
+  res.json({
+    success: true,
+    message: '状态更新成功',
+    auto_cancelled_count: autoRes3.cancelled,
+    auto_cancelled: autoRes3.cancelled_details
+  });
 });
 
 // ==================== 维修记录 ====================
@@ -1004,8 +1213,15 @@ app.post('/api/repairs', (req, res) => {
   }
 
   save();
-  refreshRoomStatus(d.faults[faultIdx].room_id);
-  res.json({ success: true, data: repair });
+  const autoRes4 = refreshRoomStatus(d.faults[faultIdx].room_id);
+  res.json({
+    success: true,
+    data: {
+      ...repair,
+      auto_cancelled_count: autoRes4.cancelled,
+      auto_cancelled: autoRes4.cancelled_details
+    }
+  });
 });
 
 // ==================== 巡检统计 ====================
@@ -1070,10 +1286,21 @@ app.get('/api/stats/inspection', (req, res) => {
 
 // ==================== 辅助函数：包间状态自动联动 ====================
 
+function fmtDTLocal(dateIso) {
+  const d = new Date(dateIso);
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function faultLevelText(level) {
+  const map = { low: '低', medium: '中', high: '高' };
+  return map[level] || level;
+}
+
 function refreshRoomStatus(roomId) {
   const d = load();
   const idx = d.rooms.findIndex(r => r.id === roomId);
-  if (idx === -1) return;
+  if (idx === -1) return { cancelled: 0, cancelled_details: [] };
   const room = d.rooms[idx];
 
   const pendingFaults = d.faults.filter(f =>
@@ -1083,18 +1310,43 @@ function refreshRoomStatus(roomId) {
   const isOccupied = d.reservations.some(r =>
     r.room_id === roomId && r.status === 'checked_in' && new Date(r.end_time) > new Date()
   );
-  if (isOccupied) return;
 
-  if (pendingFaults.length > 0 && room.status === 'idle') {
-    d.rooms[idx].status = 'maintenance';
+  let autoCancelled = [];
+  const now = new Date();
+
+  if (pendingFaults.length > 0) {
+    if (room.status === 'idle') {
+      d.rooms[idx].status = 'maintenance';
+    }
+    if (!isOccupied) {
+      const futureBooked = d.reservations.filter(r =>
+        r.room_id === roomId && r.status === 'booked' && new Date(r.start_time) > now
+      );
+      const faultSummary = pendingFaults.map(f => `[${faultLevelText(f.level)}级]${f.title}`).join('; ');
+      futureBooked.forEach(r => {
+        r.status = 'cancelled';
+        r.cancel_reason = `【系统自动取消】包间${room.name}存在${pendingFaults.length}项未解决设备故障：${faultSummary}。为保障观影体验，系统已自动取消本次预约，请及时联系客户改期或退款。`;
+        r.cancelled_at = now.toISOString();
+        r.cancelled_by = 'system';
+        autoCancelled.push({
+          id: r.id,
+          customer: r.customer_name,
+          phone: r.customer_phone,
+          time: fmtDTLocal(r.start_time),
+          amount: r.total_amount
+        });
+      });
+    }
     save();
-    return;
+    return { cancelled: autoCancelled.length, cancelled_details: autoCancelled };
   }
+
   if (pendingFaults.length === 0 && room.status === 'maintenance') {
     d.rooms[idx].status = 'idle';
     save();
-    return;
+    return { cancelled: 0, cancelled_details: [] };
   }
+  return { cancelled: 0, cancelled_details: [] };
 }
 
 // ==================== 启动服务 ====================

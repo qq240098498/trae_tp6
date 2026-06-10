@@ -267,15 +267,23 @@ function renderRoomCard(r) {
         ${r.pending_fault_count > 0
           ? `待处理故障 ${r.pending_fault_count} 项${r.pending_fault_level === 'high' ? '（含高优先级）' : ''}，请先修复设备`
           : '包间正在进行例行设备维护'}
+        ${r.system_cancelled_24h > 0 ? `<br><span style="color:#dc2626;font-weight:600">⚠️ 24h内已自动取消 ${r.system_cancelled_24h} 单，请优先处理</span>` : ''}
       </div>
     </div>
   ` : '';
 
+  const urgentBadge = r.urgent_attention ? `
+    <div class="urgent-badge">
+      🚨 紧急修复${r.system_cancelled_24h > 0 ? ` · 取消${r.system_cancelled_24h}单` : (r.pending_fault_level === 'high' ? ' · 含高危故障' : '')}
+    </div>
+  ` : '';
+
   return `
-    <div class="room-card status-${r.status} ${r.pending_fault_count > 0 ? 'has-fault' : ''}"
+    <div class="room-card status-${r.status} ${r.pending_fault_count > 0 ? 'has-fault' : ''} ${r.urgent_attention ? 'urgent-card' : ''}"
          onclick="showRoomDetail(${r.id})"
          style="position:relative">
       ${faultBadge}
+      ${urgentBadge}
       <div class="room-header">
         <div class="room-name">${r.name}</div>
         <div class="room-status ${r.status}">${statusText(r.status)}</div>
@@ -590,27 +598,32 @@ async function renderResvList() {
             <th>核验码</th><th>状态</th><th>操作</th>
           </tr></thead>
           <tbody>
-            ${list.map(r => `<tr>
-              <td>#${r.id}</td>
+            ${list.map(r => {
+              const isSystemCancel = r.cancelled_by === 'system';
+              const cancelReasonHtml = (r.status === 'cancelled' && r.cancel_reason) ?
+                `<br><div class="cancel-reason" title="${r.cancel_reason}">${r.cancel_reason}</div>` : '';
+              return `<tr class="${isSystemCancel ? 'row-system-cancelled' : ''}">
+              <td>#${r.id}${isSystemCancel ? '<br><span class="sys-cancel-tag">系统自动</span>' : ''}</td>
               <td><strong>${r.room_name}</strong><br><small style="color:var(--text-muted)">${r.room_type}</small></td>
               <td>${r.customer_name}</td>
               <td>${r.customer_phone}</td>
               <td>${fmtDT(r.start_time)}<br>~ ${fmtTime(r.end_time)}</td>
               <td>${r.movie_title || '-'}</td>
               <td style="color:var(--primary);font-weight:700">${fmtMoney(r.total_amount)}</td>
-              <td><code style="background:var(--bg);padding:4px 8px;border-radius:6px">${r.checkin_code}</code></td>
-              <td><span class="badge badge-${r.status}">${statusText(r.status)}</span></td>
+              <td>${r.status === 'cancelled' ? '<span style="color:var(--text-muted)">—</span>' :
+                `<code style="background:var(--bg);padding:4px 8px;border-radius:6px">${r.checkin_code}</code>`}</td>
+              <td><span class="badge badge-${r.status}">${statusText(r.status)}</span>${cancelReasonHtml}</td>
               <td>
                 ${r.status === 'booked' ? `
                   <button class="btn btn-sm btn-success" onclick="quickCheckin(${r.id})">核验</button>
                   <button class="btn btn-sm btn-outline" onclick="cancelResv(${r.id})">取消</button>
                 ` : r.status === 'checked_in' ? `
                   <button class="btn btn-sm btn-danger" onclick="showCheckoutModal(${r.id})">结算</button>
-                ` : r.status === 'completed' ? `
+                ` : `
                   <button class="btn btn-sm btn-outline" onclick="showResvDetail(${r.id})">详情</button>
-                ` : ''}
+                `}
               </td>
-            </tr>`).join('')}
+            </tr>`}).join('')}
           </tbody>
         </table>
       ` : '<div class="empty-state"><div class="empty-state-icon">📋</div>暂无预约记录</div>'}
@@ -1733,17 +1746,53 @@ async function submitInspection() {
   };
   const result = await request(`${API}/inspections`, { method: 'POST', body: data });
   if (result) {
-    const msg = result.fault_ids?.length ?
-      `巡检已提交！发现 ${result.fault_ids.length} 项故障，已自动上报` :
-      '巡检已提交，全部设备状态良好';
-    showToast(msg, result.fault_ids?.length ? 'warning' : 'success');
     __inspectCtx = null;
     closeModal();
-    if (currentPage === 'inspection-register') renderInspectionRegister();
-    else if (currentPage === 'inspection') renderInspectionDashboard();
-    else if (currentPage === 'devices') renderDeviceList();
-    else if (currentPage === 'faults') renderFaults();
+
+    if (result.fault_ids?.length || result.auto_cancelled_count > 0) {
+      const room = roomsCache.find(r => r.id === data.room_id);
+      let html = '';
+      if (result.fault_ids?.length) {
+        html += `<div style="padding:12px 14px;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;margin-bottom:12px">
+          <div style="font-weight:700;color:#991b1b;margin-bottom:6px">⚠️ 发现 ${result.fault_ids.length} 项设备故障，已自动上报并锁定包间</div>
+          <div style="font-size:13px;color:#b91c1c">包间 <strong>${room?.name}</strong> 状态已更新为：设备维护中，暂不接受新预约</div>
+        </div>`;
+      }
+      if (result.auto_cancelled_count > 0) {
+        html += `<div style="padding:12px 14px;background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;margin-bottom:12px">
+          <div style="font-weight:700;color:#9a3412;margin-bottom:6px">🔥 紧急通知：已自动取消 ${result.auto_cancelled_count} 个未来预约</div>
+          <div style="font-size:13px;color:#c2410c;margin-bottom:8px">为保障客户观影体验，请立即联系以下客户改期或退款：</div>
+          <table class="data-table" style="font-size:12px">
+            <thead><tr><th>预约ID</th><th>客户</th><th>电话</th><th>原预约时间</th><th>金额</th></tr></thead>
+            <tbody>
+              ${result.auto_cancelled.map(c => `<tr>
+                <td>#${c.id}</td><td><strong>${c.customer}</strong></td><td>${c.phone}</td>
+                <td>${c.time}</td><td style="color:var(--danger)">¥${c.amount}</td>
+              </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>`;
+      }
+      html += `<div style="text-align:right">
+        <button class="btn btn-primary" onclick="closeModal();refreshAllPages()">我已知晓，立即处理</button>
+      </div>`;
+      showModal(html, '⚠️ 巡检提交结果 - 紧急处理提醒', true);
+    } else {
+      showToast('巡检已提交，全部设备状态良好', 'success');
+    }
+    refreshAllPages();
   }
+}
+
+function refreshAllPages() {
+  if (currentPage === 'inspection-register') renderInspectionRegister();
+  else if (currentPage === 'inspection') renderInspectionDashboard();
+  else if (currentPage === 'devices') renderDeviceList();
+  else if (currentPage === 'faults') renderFaultList();
+  else if (currentPage === 'rooms') renderRooms();
+  else if (currentPage === 'reservations') renderResvList();
+  else if (currentPage === 'dashboard') renderDashboard();
+  else if (currentPage === 'ledger') renderLedgerList();
 }
 
 async function showInspectionDetail(id) {
@@ -1958,9 +2007,34 @@ async function submitAddFault() {
   }
   const result = await request(`${API}/faults`, { method: 'POST', body: data });
   if (result) {
-    showToast('故障已上报，请尽快安排维修', 'warning');
     closeModal();
-    renderFaultList();
+    if (result.auto_cancelled_count > 0) {
+      const room = roomsCache.find(r => r.id === (data.room_id || result.room_id));
+      let html = `<div style="padding:12px 14px;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;margin-bottom:12px">
+        <div style="font-weight:700;color:#991b1b;margin-bottom:6px">✅ 故障已上报</div>
+        <div style="font-size:13px;color:#b91c1c">包间 <strong>${room?.name || '-'}</strong> 因设备故障已进入维护状态</div>
+      </div>
+      <div style="padding:12px 14px;background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;margin-bottom:12px">
+        <div style="font-weight:700;color:#9a3412;margin-bottom:6px">🔥 紧急：系统自动取消了 ${result.auto_cancelled_count} 个未来预约</div>
+        <div style="font-size:13px;color:#c2410c;margin-bottom:8px">请立即联系以下客户安排改期或退款：</div>
+        <table class="data-table" style="font-size:12px">
+          <thead><tr><th>预约ID</th><th>客户</th><th>电话</th><th>原预约时间</th><th>金额</th></tr></thead>
+          <tbody>
+            ${result.auto_cancelled.map(c => `<tr>
+              <td>#${c.id}</td><td><strong>${c.customer}</strong></td><td>${c.phone}</td>
+              <td>${c.time}</td><td style="color:var(--danger)">¥${c.amount}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+      <div style="text-align:right">
+        <button class="btn btn-danger" onclick="closeModal();refreshAllPages()">我已知晓，马上处理</button>
+      </div>`;
+      showModal(html, '⚠️ 故障上报成功 - 紧急处理提醒', true);
+    } else {
+      showToast('故障已上报，请尽快安排维修', 'warning');
+    }
+    refreshAllPages();
   }
 }
 
@@ -2035,10 +2109,10 @@ async function submitRepair() {
   }
   const result = await request(`${API}/repairs`, { method: 'POST', body: data });
   if (result) {
-    showToast('维修记录已保存，故障已解决', 'success');
     __repairFaultId = null;
     closeModal();
-    renderFaultList();
+    showToast('维修记录已保存，故障已解决，包间可正常预约', 'success');
+    refreshAllPages();
   }
 }
 

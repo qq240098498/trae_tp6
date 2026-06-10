@@ -27,6 +27,8 @@ const DEFAULT_DATA = {
 };
 
 let data = null;
+let writeQueue = Promise.resolve();
+const roomLocks = new Map();
 
 function load() {
   if (data) return data;
@@ -36,26 +38,88 @@ function load() {
     } catch (e) {
       console.error('数据库文件损坏，重新初始化', e);
       data = JSON.parse(JSON.stringify(DEFAULT_DATA));
-      save();
+      saveSync();
     }
   } else {
     console.log('数据库不存在，正在初始化...');
     data = JSON.parse(JSON.stringify(DEFAULT_DATA));
     initDefaultData();
-    save();
+    saveSync();
   }
   return data;
 }
 
-function save() {
+function saveSync() {
   if (!data) return;
   fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2), 'utf-8');
+}
+
+function save() {
+  writeQueue = writeQueue.then(() => {
+    return new Promise((resolve) => {
+      setImmediate(() => {
+        try {
+          saveSync();
+        } catch (e) {
+          console.error('保存数据库失败:', e);
+        }
+        resolve();
+      });
+    });
+  });
+  return writeQueue;
+}
+
+function acquireRoomLock(roomId) {
+  const key = `room_${roomId}`;
+  let resolveNext;
+  const previousLock = roomLocks.get(key) || Promise.resolve();
+  const nextLock = new Promise((resolve) => {
+    resolveNext = resolve;
+  });
+  roomLocks.set(key, nextLock);
+  return previousLock.then(() => ({
+    release: () => {
+      resolveNext();
+      if (roomLocks.get(key) === nextLock) {
+        roomLocks.delete(key);
+      }
+    }
+  }));
+}
+
+function transaction(fn) {
+  writeQueue = writeQueue.then(async () => {
+    load();
+    try {
+      const result = await fn(data);
+      saveSync();
+      return result;
+    } catch (e) {
+      console.error('事务执行异常:', e);
+      throw e;
+    }
+  });
+  return writeQueue;
+}
+
+function roomTransaction(roomId, fn) {
+  return acquireRoomLock(roomId).then(async (lock) => {
+    try {
+      load();
+      const result = await fn(data);
+      saveSync();
+      return result;
+    } finally {
+      lock.release();
+    }
+  });
 }
 
 function nextId(table) {
   load();
   data._ids[table] = (data._ids[table] || 0) + 1;
-  save();
+  saveSync();
   return data._ids[table];
 }
 
@@ -181,10 +245,47 @@ function reset() {
   load();
 }
 
+function findTimeConflict(d, roomId, start, end, excludeReservationId = null) {
+  return d.reservations.find(r => {
+    if (r.room_id !== roomId) return false;
+    if (excludeReservationId && r.id === excludeReservationId) return false;
+    if (!['booked', 'checked_in'].includes(r.status)) return false;
+    const rs = new Date(r.start_time);
+    const re = new Date(r.end_time);
+    return (start < re && end > rs);
+  });
+}
+
+function countRoomCheckedIn(d, roomId) {
+  const now = new Date();
+  return d.reservations.filter(r =>
+    r.room_id === roomId &&
+    r.status === 'checked_in' &&
+    new Date(r.end_time) > now
+  ).length;
+}
+
+function countOverlappingCheckedIn(d, roomId, start, end, excludeReservationId = null) {
+  return d.reservations.filter(r => {
+    if (r.room_id !== roomId) return false;
+    if (r.status !== 'checked_in') return false;
+    if (excludeReservationId && r.id === excludeReservationId) return false;
+    const rs = new Date(r.start_time);
+    const re = new Date(r.end_time);
+    return (start < re && end > rs);
+  }).length;
+}
+
 module.exports = {
   load,
   save,
+  saveSync,
   nextId,
   reset,
-  DB_PATH
+  DB_PATH,
+  transaction,
+  roomTransaction,
+  findTimeConflict,
+  countRoomCheckedIn,
+  countOverlappingCheckedIn
 };
