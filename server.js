@@ -266,7 +266,7 @@ app.get('/api/reservations', (req, res) => {
 app.post('/api/reservations', async (req, res) => {
   const {
     room_id, movie_id, customer_name, customer_phone,
-    start_time, end_time, remark
+    start_time, end_time, remark, member_id, use_member_discount, use_free_hours
   } = req.body;
 
   if (!room_id || !customer_name || !customer_phone || !start_time || !end_time) {
@@ -280,6 +280,7 @@ app.post('/api/reservations', async (req, res) => {
   }
 
   const roomId = parseInt(room_id);
+  const memberId = member_id ? parseInt(member_id) : null;
 
   try {
     const result = await roomTransaction(roomId, async (d) => {
@@ -298,6 +299,17 @@ app.post('/api/reservations', async (req, res) => {
       const room = d.rooms.find(r => r.id === roomId);
       if (!room) {
         return { httpStatus: 404, success: false, message: '包间不存在' };
+      }
+
+      let member = null;
+      if (memberId) {
+        member = d.members.find(m => m.id === memberId);
+        if (!member) {
+          return { httpStatus: 404, success: false, message: '会员不存在' };
+        }
+        if (member.status !== 'active') {
+          return { httpStatus: 400, success: false, message: '会员状态异常，无法使用' };
+        }
       }
 
       const pendingFaults = d.faults.filter(f =>
@@ -341,7 +353,42 @@ app.post('/api/reservations', async (req, res) => {
       }
 
       const hours = Math.ceil((end - start) / (1000 * 60 * 60));
-      const total_amount = hours * room.price_per_hour;
+      const baseAmount = hours * room.price_per_hour;
+      let total_amount = baseAmount;
+      let memberDiscount = 0;
+      let memberDiscountInfo = null;
+
+      if (member && use_member_discount) {
+        const level = d.member_levels.find(l => l.id === member.level_id);
+        let discountRate = level?.discount_rate || 1;
+        const isBirthday = checkBirthday(member.birthday);
+        if (isBirthday) {
+          discountRate = level?.birthday_discount || discountRate;
+        }
+
+        let useFreeHours = 0;
+        let freeHoursDiscount = 0;
+        const wallet = d.member_wallets.find(w => w.member_id === memberId);
+        if (use_free_hours && wallet && wallet.free_hours > 0) {
+          useFreeHours = Math.min(wallet.free_hours, hours);
+          freeHoursDiscount = useFreeHours * room.price_per_hour;
+        }
+
+        const discountedBase = (baseAmount - freeHoursDiscount) * (1 - discountRate);
+        memberDiscount = freeHoursDiscount + discountedBase;
+        total_amount = Math.max(0, baseAmount - memberDiscount);
+
+        memberDiscountInfo = {
+          level_name: level?.name,
+          level_icon: level?.icon,
+          discount_rate: discountRate,
+          is_birthday: isBirthday,
+          free_hours_used: useFreeHours,
+          free_hours_discount: freeHoursDiscount,
+          discount_amount: memberDiscount
+        };
+      }
+
       const checkin_code = generateCheckinCode();
       const id = nextId('reservations');
 
@@ -349,12 +396,16 @@ app.post('/api/reservations', async (req, res) => {
         id,
         room_id: roomId,
         movie_id: movie_id ? parseInt(movie_id) : null,
+        member_id: memberId,
         customer_name,
         customer_phone,
         start_time: start.toISOString(),
         end_time: end.toISOString(),
         status: 'booked',
         total_amount,
+        original_amount: baseAmount,
+        member_discount: memberDiscount,
+        member_discount_info: memberDiscountInfo,
         paid_amount: 0,
         checkin_code,
         checkin_time: null,
@@ -367,7 +418,7 @@ app.post('/api/reservations', async (req, res) => {
       return {
         httpStatus: 200,
         success: true,
-        data: { id, checkin_code, total_amount }
+        data: { id, checkin_code, total_amount, original_amount: baseAmount, member_discount: memberDiscount, member_discount_info: memberDiscountInfo }
       };
     });
 
@@ -519,7 +570,7 @@ app.post('/api/checkin', async (req, res) => {
 // ==================== 消费结算 ====================
 
 app.post('/api/checkout/:id', async (req, res) => {
-  const { payment_method, extra_charge, remark } = req.body;
+  const { payment_method, extra_charge, remark, use_wallet_payment, member_id, use_free_hours_checkout } = req.body;
   const reservationId = parseInt(req.params.id);
   let targetRoomId = null;
   const d0 = load();
@@ -528,6 +579,7 @@ app.post('/api/checkout/:id', async (req, res) => {
     return res.status(404).json({ success: false, message: '预约不存在' });
   }
   targetRoomId = tmpResv.room_id;
+  const resMemberId = member_id ? parseInt(member_id) : tmpResv.member_id;
 
   try {
     const result = await roomTransaction(targetRoomId, async (d) => {
@@ -554,10 +606,107 @@ app.post('/api/checkout/:id', async (req, res) => {
       const bookedAmount = reservation.total_amount || 0;
       const extra = extra_charge ? parseFloat(extra_charge) : 0;
 
-      const baseAmount = Math.max(actualBaseAmount, bookedAmount);
-      const discount = (bookedAmount > 0 && bookedAmount < actualBaseAmount) ? (actualBaseAmount - bookedAmount) : 0;
-      const finalAmount = baseAmount + extra - discount;
-      const unpaid = finalAmount - (reservation.paid_amount || 0);
+      let baseAmount = Math.max(actualBaseAmount, bookedAmount);
+      let totalMemberDiscount = reservation.member_discount || 0;
+      let memberDiscountInfo = reservation.member_discount_info || null;
+      let walletPayment = 0;
+      let pointsEarned = 0;
+
+      let member = null;
+      let memberLevel = null;
+      if (resMemberId) {
+        member = d.members.find(m => m.id === resMemberId);
+        if (member && member.status === 'active') {
+          memberLevel = d.member_levels.find(l => l.id === member.level_id);
+          if (!reservation.member_id) {
+            reservation.member_id = resMemberId;
+          }
+        }
+      }
+
+      if (member && memberLevel) {
+        let discountRate = memberLevel.discount_rate || 1;
+        const isBirthday = checkBirthday(member.birthday);
+        if (isBirthday) {
+          discountRate = memberLevel.birthday_discount || discountRate;
+        }
+
+        let useFreeHours = 0;
+        let freeHoursDiscount = 0;
+        if (use_free_hours_checkout) {
+          const wallet = d.member_wallets.find(w => w.member_id === member.id);
+          if (wallet && wallet.free_hours > 0) {
+            useFreeHours = Math.min(wallet.free_hours, actualHours);
+            freeHoursDiscount = useFreeHours * room.price_per_hour;
+            wallet.free_hours -= useFreeHours;
+          }
+        }
+
+        const currentOriginal = reservation.original_amount || baseAmount;
+        if (!reservation.member_discount || baseAmount > currentOriginal) {
+          const extraHours = Math.max(0, actualHours - Math.ceil((new Date(reservation.end_time) - new Date(reservation.start_time)) / (1000 * 60 * 60)));
+          if (extraHours > 0) {
+            const extraBase = extraHours * room.price_per_hour;
+            const discountedExtra = extraBase * (1 - discountRate);
+            totalMemberDiscount += discountedExtra;
+          }
+          if (freeHoursDiscount > 0 && (!memberDiscountInfo || !memberDiscountInfo.free_hours_used)) {
+            totalMemberDiscount += freeHoursDiscount;
+          }
+        }
+
+        memberDiscountInfo = {
+          level_name: memberLevel.name,
+          level_icon: memberLevel.icon,
+          discount_rate: discountRate,
+          is_birthday: isBirthday,
+          free_hours_used: (memberDiscountInfo?.free_hours_used || 0) + useFreeHours,
+          free_hours_discount: (memberDiscountInfo?.free_hours_discount || 0) + freeHoursDiscount,
+          discount_amount: totalMemberDiscount
+        };
+      }
+
+      const discount = (bookedAmount > 0 && bookedAmount < actualBaseAmount && !totalMemberDiscount) ? (actualBaseAmount - bookedAmount) : 0;
+      const finalAmount = Math.max(0, baseAmount + extra - totalMemberDiscount - discount);
+
+      const wallet = member ? d.member_wallets.find(w => w.member_id === member.id) : null;
+      let alreadyPaid = reservation.paid_amount || 0;
+      let unpaid = finalAmount - alreadyPaid;
+
+      if (use_wallet_payment && wallet && unpaid > 0) {
+        const available = wallet.balance + wallet.gift_balance;
+        walletPayment = Math.min(unpaid, available);
+        if (walletPayment > 0) {
+          let remaining = walletPayment;
+          const useFromGift = Math.min(wallet.gift_balance, remaining);
+          wallet.gift_balance -= useFromGift;
+          remaining -= useFromGift;
+          if (remaining > 0) {
+            wallet.balance -= remaining;
+          }
+          wallet.total_consumed += walletPayment;
+          wallet.updated_at = now.toISOString();
+
+          const logId = nextId('member_wallet_logs');
+          d.member_wallet_logs.push({
+            id: logId,
+            member_id: member.id,
+            type: 'consume',
+            amount: -walletPayment,
+            gift_amount: -useFromGift,
+            free_hours_delta: memberDiscountInfo?.free_hours_used ? -memberDiscountInfo.free_hours_used : 0,
+            balance_after: wallet.balance,
+            gift_after: wallet.gift_balance,
+            free_hours_after: wallet.free_hours,
+            description: `订单消费 #${reservation.id}`,
+            operator: '系统',
+            related_id: reservation.id,
+            created_at: now.toISOString()
+          });
+        }
+        alreadyPaid += walletPayment;
+        unpaid = finalAmount - alreadyPaid;
+      }
 
       if (unpaid > 0) {
         const txId = nextId('transactions');
@@ -572,11 +721,52 @@ app.post('/api/checkout/:id', async (req, res) => {
         });
       }
 
+      if (walletPayment > 0) {
+        const txId = nextId('transactions');
+        d.transactions.push({
+          id: txId,
+          reservation_id: reservation.id,
+          type: 'wallet_payment',
+          amount: walletPayment,
+          payment_method: 'member_wallet',
+          remark: '会员余额支付',
+          created_at: now.toISOString()
+        });
+      }
+
       reservation.status = 'completed';
       reservation.checkout_time = now.toISOString();
-      reservation.paid_amount = (reservation.paid_amount || 0) + Math.max(0, unpaid);
+      reservation.paid_amount = alreadyPaid + Math.max(0, unpaid);
       reservation.total_amount = finalAmount;
+      reservation.original_amount = baseAmount;
+      reservation.member_discount = totalMemberDiscount;
+      reservation.member_discount_info = memberDiscountInfo;
       if (remark) reservation.remark = remark;
+
+      if (member && memberLevel) {
+        member.total_spent = (member.total_spent || 0) + finalAmount;
+        pointsEarned = Math.floor(finalAmount * (memberLevel.points_per_yuan || 1));
+        member.total_points = (member.total_points || 0) + pointsEarned;
+
+        const newLevel = getMemberLevel(d, member.total_points);
+        if (newLevel && newLevel.id !== member.level_id) {
+          member.level_id = newLevel.id;
+          const logId = nextId('member_wallet_logs');
+          d.member_wallet_logs.push({
+            id: logId,
+            member_id: member.id,
+            type: 'level_up',
+            amount: 0,
+            balance_after: wallet?.balance || 0,
+            gift_after: wallet?.gift_balance || 0,
+            free_hours_after: wallet?.free_hours || 0,
+            description: `升级到${newLevel.name}`,
+            operator: '系统',
+            related_id: null,
+            created_at: now.toISOString()
+          });
+        }
+      }
 
       const remainingCheckedIn = d.reservations.filter(r =>
         r.room_id === reservation.room_id &&
@@ -591,7 +781,7 @@ app.post('/api/checkout/:id', async (req, res) => {
       return {
         httpStatus: 200,
         success: true,
-        message: '结算完成',
+        message: member ? `结算完成${pointsEarned > 0 ? `，获得${pointsEarned}积分` : ''}` : '结算完成',
         data: {
           id: reservation.id,
           actual_hours: actualHours,
@@ -600,10 +790,14 @@ app.post('/api/checkout/:id', async (req, res) => {
           base_amount: baseAmount,
           extra_charge: extra,
           discount: discount,
+          member_discount: totalMemberDiscount,
+          member_discount_info: memberDiscountInfo,
           final_amount: finalAmount,
-          already_paid: reservation.paid_amount || 0,
+          already_paid: alreadyPaid,
           paid_amount: Math.max(0, unpaid),
-          unpaid_amount: Math.max(0, unpaid)
+          wallet_payment: walletPayment,
+          unpaid_amount: Math.max(0, unpaid),
+          points_earned: pointsEarned
         }
       };
     });
@@ -1771,6 +1965,538 @@ function refreshRoomStatus(roomId) {
   }
   return { cancelled: 0, cancelled_details: [] };
 }
+
+// ==================== 会员等级管理 ====================
+
+app.get('/api/member-levels', (req, res) => {
+  const d = load();
+  const levels = d.member_levels
+    .map(l => ({
+      ...l,
+      member_count: d.members.filter(m => m.level_id === l.id).length
+    }))
+    .sort((a, b) => a.level - b.level);
+  res.json({ success: true, data: levels });
+});
+
+app.put('/api/member-levels/:id', (req, res) => {
+  const { discount_rate, birthday_discount, points_per_yuan, min_points, benefits, description } = req.body;
+  const d = load();
+  const idx = d.member_levels.findIndex(l => l.id === parseInt(req.params.id));
+  if (idx === -1) return res.status(404).json({ success: false, message: '会员等级不存在' });
+
+  if (discount_rate !== undefined) d.member_levels[idx].discount_rate = parseFloat(discount_rate);
+  if (birthday_discount !== undefined) d.member_levels[idx].birthday_discount = parseFloat(birthday_discount);
+  if (points_per_yuan !== undefined) d.member_levels[idx].points_per_yuan = parseFloat(points_per_yuan);
+  if (min_points !== undefined) d.member_levels[idx].min_points = parseInt(min_points);
+  if (benefits !== undefined) d.member_levels[idx].benefits = benefits;
+  if (description !== undefined) d.member_levels[idx].description = description;
+
+  save();
+  res.json({ success: true, message: '等级更新成功' });
+});
+
+// ==================== 会员储值套餐 ====================
+
+app.get('/api/member-packages', (req, res) => {
+  const d = load();
+  const packages = d.member_packages
+    .map(p => ({
+      ...p,
+      level_name: (d.member_levels.find(l => l.id === p.level_required))?.name || '通用'
+    }))
+    .sort((a, b) => a.price - b.price);
+  res.json({ success: true, data: packages });
+});
+
+app.post('/api/member-packages', (req, res) => {
+  const { name, price, bonus, gift_hours, gift_desc, level_required, is_active } = req.body;
+  if (!name || !price) return res.status(400).json({ success: false, message: '套餐名称和价格必填' });
+
+  const d = load();
+  const id = nextId('member_packages');
+  const pkg = {
+    id,
+    name,
+    price: parseFloat(price),
+    bonus: parseFloat(bonus || 0),
+    gift_hours: parseInt(gift_hours || 0),
+    gift_desc: gift_desc || '',
+    level_required: parseInt(level_required || 1),
+    is_active: is_active !== undefined ? is_active : true,
+    created_at: new Date().toISOString()
+  };
+  d.member_packages.push(pkg);
+  save();
+  res.json({ success: true, data: pkg });
+});
+
+app.put('/api/member-packages/:id', (req, res) => {
+  const d = load();
+  const idx = d.member_packages.findIndex(p => p.id === parseInt(req.params.id));
+  if (idx === -1) return res.status(404).json({ success: false, message: '套餐不存在' });
+
+  d.member_packages[idx] = { ...d.member_packages[idx], ...req.body, id: d.member_packages[idx].id };
+  save();
+  res.json({ success: true, message: '套餐更新成功' });
+});
+
+app.delete('/api/member-packages/:id', (req, res) => {
+  const d = load();
+  const idx = d.member_packages.findIndex(p => p.id === parseInt(req.params.id));
+  if (idx === -1) return res.status(404).json({ success: false, message: '套餐不存在' });
+
+  d.member_packages.splice(idx, 1);
+  save();
+  res.json({ success: true, message: '套餐已删除' });
+});
+
+// ==================== 会员管理 ====================
+
+function getMemberLevel(d, totalPoints) {
+  const sorted = [...d.member_levels].sort((a, b) => b.level - a.level);
+  return sorted.find(l => totalPoints >= l.min_points) || sorted[sorted.length - 1];
+}
+
+function checkBirthday(birthdayStr) {
+  if (!birthdayStr) return false;
+  const today = new Date();
+  const b = new Date(birthdayStr);
+  return today.getMonth() === b.getMonth() && today.getDate() === b.getDate();
+}
+
+app.get('/api/members', (req, res) => {
+  const { keyword, level_id, status, page, page_size } = req.query;
+  const d = load();
+  let members = [...d.members];
+
+  if (keyword) {
+    const kw = String(keyword).toLowerCase();
+    members = members.filter(m =>
+      m.name.toLowerCase().includes(kw) ||
+      m.phone.includes(kw)
+    );
+  }
+  if (level_id) members = members.filter(m => m.level_id === parseInt(level_id));
+  if (status) members = members.filter(m => m.status === status);
+
+  const total = members.length;
+  let pageNum = parseInt(page) || 1;
+  let pageSize = parseInt(page_size) || 50;
+  if (pageNum < 1) pageNum = 1;
+  const start = (pageNum - 1) * pageSize;
+  members = members.slice(start, start + pageSize);
+
+  const result = members.map(m => {
+    const level = d.member_levels.find(l => l.id === m.level_id);
+    const wallet = d.member_wallets.find(w => w.member_id === m.id);
+    const orderCount = d.reservations.filter(r => r.member_id === m.id).length;
+    return {
+      ...m,
+      level_name: level?.name || '未知',
+      level_icon: level?.icon || '',
+      level_level: level?.level || 1,
+      discount_rate: level?.discount_rate || 1,
+      balance: wallet?.balance || 0,
+      gift_balance: wallet?.gift_balance || 0,
+      free_hours: wallet?.free_hours || 0,
+      total_recharged: wallet?.total_recharged || 0,
+      order_count: orderCount
+    };
+  }).sort((a, b) => b.id - a.id);
+
+  res.json({ success: true, data: { list: result, total, page: pageNum, page_size: pageSize } });
+});
+
+app.get('/api/members/:id', (req, res) => {
+  const d = load();
+  const member = d.members.find(m => m.id === parseInt(req.params.id));
+  if (!member) return res.status(404).json({ success: false, message: '会员不存在' });
+
+  const level = d.member_levels.find(l => l.id === member.level_id);
+  const wallet = d.member_wallets.find(w => w.member_id === member.id);
+  const walletLogs = d.member_wallet_logs
+    .filter(l => l.member_id === member.id)
+    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+    .slice(0, 100);
+
+  const reservations = d.reservations
+    .filter(r => r.member_id === member.id)
+    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+    .map(r => {
+      const room = d.rooms.find(x => x.id === r.room_id);
+      const movie = r.movie_id ? d.movies.find(x => x.id === r.movie_id) : null;
+      return {
+        ...r,
+        room_name: room?.name,
+        room_type: room?.type,
+        movie_title: movie?.title
+      };
+    });
+
+  const totalOrders = reservations.length;
+  const totalWatchHours = reservations
+    .filter(r => ['checked_in', 'completed'].includes(r.status))
+    .reduce((s, r) => {
+      const start = new Date(r.checkin_time || r.start_time);
+      const end = new Date(r.checkout_time || r.end_time);
+      return s + Math.max(1, Math.ceil((end - start) / (1000 * 60 * 60)));
+    }, 0);
+
+  const watchMovieMap = {};
+  reservations.forEach(r => {
+    if (r.movie_id) {
+      if (!watchMovieMap[r.movie_id]) watchMovieMap[r.movie_id] = 0;
+      watchMovieMap[r.movie_id]++;
+    }
+  });
+  const favMovies = Object.entries(watchMovieMap)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([mid, cnt]) => {
+      const m = d.movies.find(x => x.id === parseInt(mid));
+      return { movie_id: parseInt(mid), title: m?.title, watch_count: cnt };
+    });
+
+  res.json({
+    success: true,
+    data: {
+      ...member,
+      level_name: level?.name || '未知',
+      level_icon: level?.icon || '',
+      level_level: level?.level || 1,
+      discount_rate: level?.discount_rate || 1,
+      birthday_discount: level?.birthday_discount || 1,
+      points_per_yuan: level?.points_per_yuan || 1,
+      benefits: level?.benefits || [],
+      level_description: level?.description || '',
+      wallet: wallet || { balance: 0, gift_balance: 0, free_hours: 0, total_recharged: 0, total_consumed: 0 },
+      wallet_logs: walletLogs,
+      reservations: reservations,
+      stats: {
+        total_orders: totalOrders,
+        total_watch_hours: totalWatchHours,
+        total_spent: member.total_spent || 0,
+        fav_movies: favMovies
+      }
+    }
+  });
+});
+
+app.post('/api/members', (req, res) => {
+  const { name, phone, gender, birthday, email, address, remark, initial_balance } = req.body;
+  if (!name || !phone) return res.status(400).json({ success: false, message: '姓名和手机号必填' });
+
+  const d = load();
+  if (d.members.some(m => m.phone === phone)) {
+    return res.status(400).json({ success: false, message: '该手机号已注册会员' });
+  }
+
+  const level = d.member_levels.find(l => l.level === 1);
+  const memberId = nextId('members');
+  const now = new Date().toISOString();
+
+  const member = {
+    id: memberId,
+    name,
+    phone,
+    gender: gender || '男',
+    birthday: birthday || '',
+    email: email || '',
+    address: address || '',
+    level_id: level?.id || 1,
+    total_points: 0,
+    total_spent: 0,
+    status: 'active',
+    remark: remark || '',
+    created_at: now
+  };
+  d.members.push(member);
+
+  const walletId = nextId('member_wallets');
+  const initBal = parseFloat(initial_balance || 0);
+  const wallet = {
+    id: walletId,
+    member_id: memberId,
+    balance: initBal,
+    gift_balance: 0,
+    free_hours: 0,
+    total_recharged: initBal,
+    total_consumed: 0,
+    created_at: now,
+    updated_at: now
+  };
+  d.member_wallets.push(wallet);
+
+  if (initBal > 0) {
+    const logId = nextId('member_wallet_logs');
+    d.member_wallet_logs.push({
+      id: logId,
+      member_id: memberId,
+      type: 'recharge',
+      amount: initBal,
+      gift_amount: 0,
+      balance_after: initBal,
+      gift_after: 0,
+      free_hours_after: 0,
+      description: '开户赠送',
+      operator: '系统',
+      related_id: null,
+      created_at: now
+    });
+  }
+
+  save();
+
+  const returnLevel = d.member_levels.find(l => l.id === member.level_id);
+  res.json({
+    success: true,
+    message: '会员开户成功',
+    data: {
+      id: memberId,
+      ...member,
+      level_name: returnLevel?.name || '普通会员',
+      level_icon: returnLevel?.icon || '',
+      wallet: wallet
+    }
+  });
+});
+
+app.put('/api/members/:id', (req, res) => {
+  const d = load();
+  const idx = d.members.findIndex(m => m.id === parseInt(req.params.id));
+  if (idx === -1) return res.status(404).json({ success: false, message: '会员不存在' });
+
+  const allowedFields = ['name', 'gender', 'birthday', 'email', 'address', 'remark', 'status'];
+  allowedFields.forEach(f => {
+    if (req.body[f] !== undefined) d.members[idx][f] = req.body[f];
+  });
+
+  if (req.body.phone && req.body.phone !== d.members[idx].phone) {
+    if (d.members.some(m => m.phone === req.body.phone && m.id !== d.members[idx].id)) {
+      return res.status(400).json({ success: false, message: '该手机号已被其他会员使用' });
+    }
+    d.members[idx].phone = req.body.phone;
+  }
+
+  save();
+  res.json({ success: true, message: '会员信息更新成功' });
+});
+
+app.post('/api/members/:id/recharge', (req, res) => {
+  const { package_id, amount, gift_amount, gift_hours, remark } = req.body;
+  const memberId = parseInt(req.params.id);
+  const d = load();
+
+  const memberIdx = d.members.findIndex(m => m.id === memberId);
+  if (memberIdx === -1) return res.status(404).json({ success: false, message: '会员不存在' });
+  if (d.members[memberIdx].status !== 'active') {
+    return res.status(400).json({ success: false, message: '会员状态异常，无法充值' });
+  }
+
+  const walletIdx = d.member_wallets.findIndex(w => w.member_id === memberId);
+  if (walletIdx === -1) return res.status(400).json({ success: false, message: '会员钱包不存在' });
+
+  let realAmount = parseFloat(amount || 0);
+  let realGift = parseFloat(gift_amount || 0);
+  let realFreeHours = parseInt(gift_hours || 0);
+  let desc = remark || '手动充值';
+
+  if (package_id) {
+    const pkg = d.member_packages.find(p => p.id === parseInt(package_id));
+    if (!pkg) return res.status(400).json({ success: false, message: '套餐不存在' });
+    if (!pkg.is_active) return res.status(400).json({ success: false, message: '套餐已下架' });
+
+    const member = d.members[memberIdx];
+    const level = d.member_levels.find(l => l.id === member.level_id);
+    if ((level?.level || 1) < pkg.level_required) {
+      const needLevel = d.member_levels.find(l => l.level === pkg.level_required);
+      return res.status(400).json({ success: false, message: `需要${needLevel?.name || '指定等级'}才能购买此套餐` });
+    }
+
+    realAmount = pkg.price;
+    realGift = pkg.bonus;
+    realFreeHours = pkg.gift_hours;
+    desc = `购买套餐: ${pkg.name}`;
+  }
+
+  if (realAmount <= 0 && realGift <= 0 && realFreeHours <= 0) {
+    return res.status(400).json({ success: false, message: '充值金额不能为0' });
+  }
+
+  const now = new Date().toISOString();
+  const wallet = d.member_wallets[walletIdx];
+  wallet.balance += realAmount;
+  wallet.gift_balance += realGift;
+  wallet.free_hours += realFreeHours;
+  wallet.total_recharged += realAmount;
+  wallet.updated_at = now;
+
+  const logId = nextId('member_wallet_logs');
+  d.member_wallet_logs.push({
+    id: logId,
+    member_id: memberId,
+    type: 'recharge',
+    amount: realAmount,
+    gift_amount: realGift,
+    free_hours_delta: realFreeHours,
+    balance_after: wallet.balance,
+    gift_after: wallet.gift_balance,
+    free_hours_after: wallet.free_hours,
+    description: desc,
+    operator: '管理员',
+    related_id: package_id ? parseInt(package_id) : null,
+    created_at: now
+  });
+
+  save();
+  res.json({
+    success: true,
+    message: '充值成功',
+    data: {
+      amount: realAmount,
+      gift_amount: realGift,
+      free_hours: realFreeHours,
+      balance: wallet.balance,
+      gift_balance: wallet.gift_balance,
+      free_hours: wallet.free_hours
+    }
+  });
+});
+
+// ==================== 会员折扣计算 ====================
+
+app.post('/api/members/calc-discount', (req, res) => {
+  const { member_id, base_amount, hours, use_free_hours, extra_amount } = req.body;
+  const d = load();
+  const member = member_id ? d.members.find(m => m.id === parseInt(member_id)) : null;
+
+  let discountRate = 1;
+  let memberLevel = null;
+  let discountAmount = 0;
+  let pointsEarn = 0;
+  let useFreeHours = 0;
+  let freeHoursDiscount = 0;
+  let isBirthday = false;
+  let hourlyRate = 0;
+
+  if (hours && base_amount) {
+    hourlyRate = base_amount / hours;
+  }
+
+  if (member) {
+    memberLevel = d.member_levels.find(l => l.id === member.level_id);
+    discountRate = memberLevel?.discount_rate || 1;
+    isBirthday = checkBirthday(member.birthday);
+    if (isBirthday) {
+      discountRate = memberLevel?.birthday_discount || discountRate;
+    }
+
+    const wallet = d.member_wallets.find(w => w.member_id === member.id);
+    if (use_free_hours && wallet && wallet.free_hours > 0 && hours) {
+      useFreeHours = Math.min(wallet.free_hours, hours);
+      freeHoursDiscount = useFreeHours * hourlyRate;
+    }
+
+    const discountedBase = (base_amount - freeHoursDiscount) * (1 - discountRate);
+    discountAmount = freeHoursDiscount + discountedBase;
+    const finalSpent = Math.max(0, base_amount - discountAmount) + (parseFloat(extra_amount) || 0);
+    pointsEarn = Math.floor(finalSpent * (memberLevel?.points_per_yuan || 1));
+  }
+
+  const finalAmount = Math.max(0, base_amount - discountAmount) + (parseFloat(extra_amount) || 0);
+
+  res.json({
+    success: true,
+    data: {
+      base_amount: parseFloat(base_amount) || 0,
+      extra_amount: parseFloat(extra_amount) || 0,
+      discount_rate: discountRate,
+      discount_rate_text: `${Math.round(discountRate * 100)}%`,
+      is_birthday: isBirthday,
+      level_name: memberLevel?.name,
+      level_icon: memberLevel?.icon,
+      free_hours_used: useFreeHours,
+      free_hours_discount: freeHoursDiscount,
+      discount_amount: discountAmount,
+      final_amount: finalAmount,
+      points_earn: pointsEarn,
+      balance_available: member ? ((d.member_wallets.find(w => w.member_id === member.id))?.balance || 0) : 0
+    }
+  });
+});
+
+// ==================== 会员订单独立查询 ====================
+
+app.get('/api/members/:id/orders', (req, res) => {
+  const { status, page, page_size, start_date, end_date } = req.query;
+  const memberId = parseInt(req.params.id);
+  const d = load();
+
+  const member = d.members.find(m => m.id === memberId);
+  if (!member) return res.status(404).json({ success: false, message: '会员不存在' });
+
+  let orders = d.reservations.filter(r => r.member_id === memberId);
+  if (status) orders = orders.filter(r => r.status === status);
+
+  let startDate, endDate;
+  if (start_date) startDate = new Date(start_date);
+  if (end_date) {
+    endDate = new Date(end_date);
+    endDate.setDate(endDate.getDate() + 1);
+  }
+  if (startDate) orders = orders.filter(r => new Date(r.created_at) >= startDate);
+  if (endDate) orders = orders.filter(r => new Date(r.created_at) < endDate);
+
+  const total = orders.length;
+  let pageNum = parseInt(page) || 1;
+  let pageSize = parseInt(page_size) || 20;
+  if (pageNum < 1) pageNum = 1;
+  const start = (pageNum - 1) * pageSize;
+
+  const list = orders
+    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+    .slice(start, start + pageSize)
+    .map(r => {
+      const room = d.rooms.find(x => x.id === r.room_id);
+      const movie = r.movie_id ? d.movies.find(x => x.id === r.movie_id) : null;
+      const txs = d.transactions.filter(t => t.reservation_id === r.id);
+      return {
+        ...r,
+        room_name: room?.name,
+        room_type: room?.type,
+        movie_title: movie?.title,
+        paid_amount: txs.filter(t => t.type === 'payment').reduce((s, t) => s + t.amount, 0),
+        wallet_deduction: txs.filter(t => t.type === 'wallet_payment').reduce((s, t) => s + t.amount, 0)
+      };
+    });
+
+  const totalSpent = orders.filter(r => r.status === 'completed').reduce((s, r) => s + (r.total_amount || 0), 0);
+  const totalHours = orders
+    .filter(r => ['checked_in', 'completed'].includes(r.status))
+    .reduce((s, r) => {
+      const st = new Date(r.checkin_time || r.start_time);
+      const et = new Date(r.checkout_time || r.end_time);
+      return s + Math.max(1, Math.ceil((et - st) / (1000 * 60 * 60)));
+    }, 0);
+
+  res.json({
+    success: true,
+    data: {
+      list,
+      total,
+      page: pageNum,
+      page_size: pageSize,
+      summary: {
+        total_spent: totalSpent,
+        total_hours: totalHours,
+        total_orders: orders.length,
+        completed_orders: orders.filter(r => r.status === 'completed').length,
+        cancelled_orders: orders.filter(r => r.status === 'cancelled').length
+      }
+    }
+  });
+});
 
 // ==================== 启动服务 ====================
 

@@ -13,6 +13,12 @@ const DEFAULT_DATA = {
   inspections: [],
   faults: [],
   repairs: [],
+  member_levels: [],
+  members: [],
+  member_packages: [],
+  member_wallets: [],
+  member_wallet_logs: [],
+  member_orders: [],
   _ids: {
     rooms: 0,
     movie_categories: 0,
@@ -22,7 +28,13 @@ const DEFAULT_DATA = {
     devices: 0,
     inspections: 0,
     faults: 0,
-    repairs: 0
+    repairs: 0,
+    member_levels: 0,
+    members: 0,
+    member_packages: 0,
+    member_wallets: 0,
+    member_wallet_logs: 0,
+    member_orders: 0
   }
 };
 
@@ -235,6 +247,74 @@ function initDefaultData() {
   console.log('  - 包间:', data.rooms.length);
   console.log('  - 分类:', data.movie_categories.length);
   console.log('  - 影片:', data.movies.length);
+
+  console.log('初始化会员等级...');
+  const levels = [
+    { name: '普通会员', level: 1, icon: '🥉', min_points: 0, discount_rate: 1.0, birthday_discount: 0.95, points_per_yuan: 1, description: '注册即成为普通会员', benefits: ['生日享95折', '积分1:1累积'] },
+    { name: '银卡会员', level: 2, icon: '🥈', min_points: 1000, discount_rate: 0.95, birthday_discount: 0.90, points_per_yuan: 1.2, description: '累积消费满1000元升级', benefits: ['全场95折', '生日享9折', '积分1.2倍累积', '专属客服'] },
+    { name: '金卡会员', level: 3, icon: '🥇', min_points: 5000, discount_rate: 0.90, birthday_discount: 0.85, points_per_yuan: 1.5, description: '累积消费满5000元升级', benefits: ['全场9折', '生日享85折', '积分1.5倍累积', '优先预约权', '免费升级包间1次/月'] },
+    { name: '钻石会员', level: 4, icon: '💎', min_points: 20000, discount_rate: 0.85, birthday_discount: 0.80, points_per_yuan: 2.0, description: '累积消费满20000元升级', benefits: ['全场85折', '生日享8折', '积分2倍累积', '优先预约权', '免费升级包间2次/月', '专属影厅预留', '免费观影券2张/月'] }
+  ];
+  levels.forEach(l => {
+    const id = nextId('member_levels');
+    data.member_levels.push({ ...l, id, created_at: new Date().toISOString() });
+  });
+  console.log('  - 会员等级:', data.member_levels.length);
+
+  console.log('初始化会员储值套餐...');
+  const packages = [
+    { name: '青铜套餐', price: 500, bonus: 50, gift_hours: 0, gift_desc: '充500送50', level_required: 1, is_active: true },
+    { name: '白银套餐', price: 1000, bonus: 150, gift_hours: 2, gift_desc: '充1000送150+2小时免费观影', level_required: 1, is_active: true },
+    { name: '黄金套餐', price: 3000, bonus: 600, gift_hours: 6, gift_desc: '充3000送600+6小时免费观影', level_required: 2, is_active: true },
+    { name: '铂金套餐', price: 5000, bonus: 1200, gift_hours: 12, gift_desc: '充5000送1200+12小时免费观影', level_required: 2, is_active: true },
+    { name: '钻石套餐', price: 10000, bonus: 3000, gift_hours: 30, gift_desc: '充10000送3000+30小时免费观影', level_required: 3, is_active: true }
+  ];
+  packages.forEach(p => {
+    const id = nextId('member_packages');
+    data.member_packages.push({ ...p, id, created_at: new Date().toISOString() });
+  });
+  console.log('  - 会员套餐:', data.member_packages.length);
+
+  console.log('初始化示例会员数据...');
+  const demoMembers = [
+    { name: '张先生', phone: '13800138001', gender: '男', birthday: '1990-05-15', email: '', address: '', remark: '老客户，经常来' },
+    { name: '李女士', phone: '13800138002', gender: '女', birthday: '1992-08-20', email: 'li@example.com', address: '', remark: '喜欢爱情片' }
+  ];
+  demoMembers.forEach((m, idx) => {
+    const id = nextId('members');
+    const levelId = idx === 0 ? 3 : 2;
+    const member = {
+      id,
+      name: m.name,
+      phone: m.phone,
+      gender: m.gender,
+      birthday: m.birthday,
+      email: m.email,
+      address: m.address,
+      level_id: levelId,
+      total_points: idx === 0 ? 8500 : 3200,
+      total_spent: idx === 0 ? 8500 : 3200,
+      status: 'active',
+      remark: m.remark,
+      created_at: new Date(Date.now() - (idx + 1) * 30 * 24 * 60 * 60 * 1000).toISOString()
+    };
+    data.members.push(member);
+
+    const walletId = nextId('member_wallets');
+    const wallet = {
+      id: walletId,
+      member_id: id,
+      balance: idx === 0 ? 2680.00 : 850.00,
+      gift_balance: idx === 0 ? 150.00 : 50.00,
+      free_hours: idx === 0 ? 5 : 2,
+      total_recharged: idx === 0 ? 11000 : 4000,
+      total_consumed: idx === 0 ? 8320 : 3150,
+      created_at: member.created_at,
+      updated_at: new Date().toISOString()
+    };
+    data.member_wallets.push(wallet);
+  });
+  console.log('  - 示例会员:', data.members.length);
 }
 
 function reset() {

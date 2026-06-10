@@ -2,6 +2,8 @@ const API = '/api';
 let currentPage = 'dashboard';
 let categoriesCache = [];
 let moviesCache = [];
+let currentMemberId = null;
+let membersCache = [];
 
 async function request(url, options = {}) {
   try {
@@ -682,6 +684,7 @@ async function showBookingModal(preRoomId) {
   const rooms = await request(`${API}/rooms`);
   categoriesCache = categoriesCache.length ? categoriesCache : await request(`${API}/categories`) || [];
   moviesCache = await request(`${API}/movies`) || [];
+  await loadMembersCache();
 
   const bookedRooms = rooms.filter(r => r.status === 'maintenance' || r.pending_fault_count > 0);
   const availableRooms = rooms.filter(r => r.status !== 'maintenance' && (r.pending_fault_count || 0) === 0);
@@ -715,12 +718,21 @@ async function showBookingModal(preRoomId) {
   const defaultEnd = new Date(defaultStart.getTime() + 2 * 60 * 60 * 1000);
   const fmtDT = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 
+  const memberOptions = membersCache.length ?
+    `<option value="">不使用会员</option>` +
+    membersCache.filter(m => m.status === 'active').map(m =>
+      `<option value="${m.id}" data-level="${m.level_level}" data-discount="${m.discount_rate}" data-balance="${m.balance || 0}">
+        ${m.name} (${m.phone}) - ${m.level_icon}${m.level_name} ${fmtMoney(m.balance || 0)}
+      </option>`
+    ).join('') :
+    '<option value="">暂无会员</option>';
+
   showModal(`
     ${warningHtml}
     <div class="form-row">
       <div class="form-group">
         <label class="form-label">选择包间 *</label>
-        <select class="form-select" id="b_room" ${!availableRooms.length?'disabled':''}>
+        <select class="form-select" id="b_room" ${!availableRooms.length?'disabled':''} onchange="calcBookingDiscount()">
           ${availableRooms.map(r => `
             <option value="${r.id}" data-price="${r.price_per_hour}" ${preRoomId==r.id?'selected':''}>
               ${r.name} - ${r.type} (${r.capacity}人) - ${fmtMoney(r.price_per_hour)}/时
@@ -743,17 +755,35 @@ async function showBookingModal(preRoomId) {
       </div>
       <div class="form-group">
         <label class="form-label">联系电话 *</label>
-        <input class="form-input" id="b_phone" placeholder="输入手机号">
+        <input class="form-input" id="b_phone" placeholder="输入手机号" onchange="autoMatchMember(this.value)">
       </div>
     </div>
     <div class="form-row">
       <div class="form-group">
         <label class="form-label">开始时间 *</label>
-        <input class="form-input" id="b_start" type="datetime-local" value="${fmtDT(defaultStart)}" onchange="calcAmount()">
+        <input class="form-input" id="b_start" type="datetime-local" value="${fmtDT(defaultStart)}" onchange="calcBookingDiscount()">
       </div>
       <div class="form-group">
         <label class="form-label">结束时间 *</label>
-        <input class="form-input" id="b_end" type="datetime-local" value="${fmtDT(defaultEnd)}" onchange="calcAmount()">
+        <input class="form-input" id="b_end" type="datetime-local" value="${fmtDT(defaultEnd)}" onchange="calcBookingDiscount()">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">选择会员</label>
+        <select class="form-select" id="b_member" onchange="onSelectBookingMember(this.value)">
+          ${memberOptions}
+        </select>
+      </div>
+      <div class="form-group" style="display:flex;align-items:flex-end;gap:8px">
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;padding-bottom:6px">
+          <input type="checkbox" id="b_use_discount" checked onchange="calcBookingDiscount()">
+          使用会员折扣
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;padding-bottom:6px" id="b_free_hours_label" style="display:none">
+          <input type="checkbox" id="b_use_free_hours" onchange="calcBookingDiscount()">
+          使用免费时长
+        </label>
       </div>
     </div>
     <div class="form-group">
@@ -766,29 +796,121 @@ async function showBookingModal(preRoomId) {
       { text: '确认预约', class: 'btn-primary', onclick: 'submitBooking()' }
     ])}
   `, '新建预约');
-  calcAmount();
+  calcBookingDiscount();
 }
 
-function calcAmount() {
+function autoMatchMember(phone) {
+  const m = membersCache.find(x => x.phone === phone && x.status === 'active');
+  if (m) {
+    document.getElementById('b_member').value = m.id;
+    document.getElementById('b_name').value = m.name;
+    onSelectBookingMember(m.id);
+    showToast(`已匹配会员: ${m.name} (${m.level_name})`, 'info');
+  }
+}
+
+function onSelectBookingMember(memberId) {
+  const freeHoursLabel = document.getElementById('b_free_hours_label');
+  if (!freeHoursLabel) return;
+  if (memberId) {
+    const m = membersCache.find(x => x.id === parseInt(memberId));
+    freeHoursLabel.style.display = (m && m.free_hours > 0) ? 'flex' : 'none';
+    if (m) {
+      document.getElementById('b_use_free_hours').checked = false;
+      freeHoursLabel.querySelector('label').innerHTML =
+        `<input type="checkbox" id="b_use_free_hours" onchange="calcBookingDiscount()"> 使用免费时长 (剩余${m.free_hours}h)`;
+    }
+  } else {
+    freeHoursLabel.style.display = 'none';
+  }
+  calcBookingDiscount();
+}
+
+async function calcBookingDiscount() {
   const roomSel = document.getElementById('b_room');
   const startEl = document.getElementById('b_start');
   const endEl = document.getElementById('b_end');
+  const memberSel = document.getElementById('b_member');
+  const useDiscountEl = document.getElementById('b_use_discount');
+  const useFreeHoursEl = document.getElementById('b_use_free_hours');
   if (!roomSel || !startEl || !endEl) return;
 
   const price = parseFloat(roomSel.selectedOptions[0]?.dataset.price || 0);
   const start = new Date(startEl.value);
   const end = new Date(endEl.value);
   const hours = Math.max(0, Math.ceil((end - start) / (1000 * 60 * 60)));
-  const total = hours * price;
+  const baseAmount = hours * price;
+
+  const memberId = memberSel?.value ? parseInt(memberSel.value) : null;
+  const useDiscount = useDiscountEl?.checked;
+  const useFreeHours = useFreeHoursEl?.checked;
+
+  let extraHtml = '';
+  let finalAmount = baseAmount;
+  let discountInfo = null;
+
+  if (memberId && useDiscount) {
+    discountInfo = await request(`${API}/members/calc-discount`, {
+      method: 'POST',
+      body: {
+        member_id: memberId,
+        base_amount: baseAmount,
+        hours: hours,
+        use_free_hours: useFreeHours
+      }
+    });
+
+    if (discountInfo) {
+      finalAmount = discountInfo.final_amount;
+      let infoParts = [];
+      if (discountInfo.level_name) {
+        infoParts.push(`<span>${discountInfo.level_icon || ''} ${discountInfo.level_name} ${discountInfo.discount_rate_text}</span>`);
+      }
+      if (discountInfo.is_birthday) {
+        infoParts.push(`<span style="color:#dc2626">🎂 生日特惠</span>`);
+      }
+      if (discountInfo.free_hours_used > 0) {
+        infoParts.push(`<span style="color:#0ea5e9">免费时长抵扣${discountInfo.free_hours_used}h (-${fmtMoney(discountInfo.free_hours_discount)})</span>`);
+      }
+      extraHtml = `
+        <div class="settlement-row">
+          <span>会员优惠</span>
+          <span style="color:#16a34a">${infoParts.join(' · ')}</span>
+        </div>
+        <div class="settlement-row">
+          <span>优惠金额</span>
+          <span style="color:#dc2626">-${fmtMoney(discountInfo.discount_amount)}</span>
+        </div>
+        <div class="settlement-row">
+          <span>获得积分</span>
+          <span style="color:#ea580c">+${discountInfo.points_earn}分</span>
+        </div>
+        <div class="settlement-row">
+          <span>可用余额</span>
+          <span>${fmtMoney(discountInfo.balance_available)}</span>
+        </div>
+      `;
+    }
+  }
 
   document.getElementById('amountPreview').innerHTML = `
     <div class="settlement-row"><span>包间单价</span>${fmtMoney(price)} / 小时</div>
     <div class="settlement-row"><span>使用时长</span>${hours} 小时</div>
-    <div class="settlement-row total"><span>预计金额</span>${fmtMoney(total)}</div>
+    ${baseAmount !== finalAmount ? `<div class="settlement-row"><span>原价</span><span style="text-decoration:line-through;color:#94a3b8">${fmtMoney(baseAmount)}</span></div>` : ''}
+    ${extraHtml}
+    <div class="settlement-row total"><span>预计金额</span>${fmtMoney(finalAmount)}</div>
   `;
 }
 
+function calcAmount() {
+  calcBookingDiscount();
+}
+
 async function submitBooking() {
+  const memberId = parseInt(document.getElementById('b_member').value) || null;
+  const useDiscount = document.getElementById('b_use_discount')?.checked;
+  const useFreeHours = document.getElementById('b_use_free_hours')?.checked;
+
   const data = {
     room_id: parseInt(document.getElementById('b_room').value),
     movie_id: parseInt(document.getElementById('b_movie').value) || null,
@@ -796,7 +918,10 @@ async function submitBooking() {
     customer_phone: document.getElementById('b_phone').value.trim(),
     start_time: document.getElementById('b_start').value,
     end_time: document.getElementById('b_end').value,
-    remark: document.getElementById('b_remark').value.trim()
+    remark: document.getElementById('b_remark').value.trim(),
+    member_id: memberId,
+    use_member_discount: !!memberId && useDiscount,
+    use_free_hours: useFreeHours
   };
   if (!data.customer_name || !data.customer_phone || !data.start_time || !data.end_time) {
     showToast('请填写所有必填项', 'warning');
@@ -804,7 +929,11 @@ async function submitBooking() {
   }
   const result = await request(`${API}/reservations`, { method: 'POST', body: data });
   if (result) {
-    showToast(`预约成功！核验码: ${result.checkin_code}  金额: ${fmtMoney(result.total_amount)}`, 'success');
+    let msg = `预约成功！核验码: ${result.checkin_code}  金额: ${fmtMoney(result.total_amount)}`;
+    if (result.member_discount_info) {
+      msg += `（优惠${fmtMoney(result.member_discount)}）`;
+    }
+    showToast(msg, 'success');
     closeModal();
     if (currentPage === 'reservations') renderResvList();
     else if (currentPage === 'rooms') renderRooms();
@@ -949,6 +1078,7 @@ async function showCheckoutModal(reservationId) {
     }
   }
   if (!r) return;
+  await loadMembersCache();
 
   const startTime = r.checkin_time ? new Date(r.checkin_time) : new Date(r.start_time);
   const hours = Math.max(1, Math.ceil((new Date() - startTime) / (1000 * 60 * 60)));
@@ -960,12 +1090,27 @@ async function showCheckoutModal(reservationId) {
   const subtotal = base - discount;
   const unpaidBeforeExtra = subtotal - paid;
 
+  const preMemberId = r.member_id;
+  const preMember = preMemberId ? membersCache.find(m => m.id === preMemberId) : null;
+  const memberOptions = `<option value="">不使用会员</option>` +
+    (membersCache.filter(m => m.status === 'active').map(m =>
+      `<option value="${m.id}" ${preMemberId == m.id ? 'selected' : ''}>${m.name} (${m.phone}) - ${m.level_icon}${m.level_name} 余${fmtMoney(m.balance || 0)}</option>`
+    ).join(''));
+
   __checkoutCtx = {
+    r,
+    hours,
+    actualBase,
+    bookedTotal,
+    paid,
     base,
     discount,
     subtotal,
-    paid,
-    unpaidBeforeExtra
+    unpaidBeforeExtra,
+    selectedMemberId: preMemberId || null,
+    preMember,
+    useWallet: false,
+    useFreeHours: false
   };
 
   showModal(`
@@ -973,18 +1118,29 @@ async function showCheckoutModal(reservationId) {
       <div class="form-group"><div class="form-label">包间</div><div style="font-size:16px;font-weight:600">${r.room_name} (${r.room_type})</div></div>
       <div class="form-group"><div class="form-label">顾客</div><div>${r.customer_name} · ${r.customer_phone}</div></div>
     </div>
-    <div class="settlement-summary">
-      <div class="settlement-row"><span>入场时间</span><span>${fmtDT(r.checkin_time || r.start_time)}</span></div>
-      <div class="settlement-row"><span>当前时间</span><span>${fmtDT(new Date())}</span></div>
-      <div class="settlement-row"><span>实际观影时长</span><span style="font-weight:700;color:var(--primary)">${hours} 小时</span></div>
-      <div class="settlement-row"><span>包间单价</span><span>${fmtMoney(r.price_per_hour)} / 小时</span></div>
-      <div class="settlement-row"><span>按实际时长计费 (${hours}h × ${fmtMoney(r.price_per_hour)})</span><span>${fmtMoney(actualBase)}</span></div>
-      <div class="settlement-row"><span>预约时预估费用</span><span>${fmtMoney(bookedTotal)}</span></div>
-      ${discount > 0 ? `<div class="settlement-row" style="color:var(--success)"><span>优惠减免 (按预约价计)</span><span>- ${fmtMoney(discount)}</span></div>` : ''}
-      <div class="settlement-row"><span>费用小计</span><span style="font-weight:600">${fmtMoney(subtotal)}</span></div>
-      <div class="settlement-row"><span>已支付金额</span><span style="color:var(--success);font-weight:600">- ${fmtMoney(paid)}</span></div>
-      <div class="settlement-row total"><span>本次应付金额</span><span>${fmtMoney(Math.max(0, unpaidBeforeExtra))}</span></div>
+
+    <div class="form-row" style="background:#f8fafc;padding:12px;border-radius:8px;margin-bottom:8px">
+      <div class="form-group">
+        <label class="form-label">关联会员</label>
+        <select class="form-select" id="co_member" onchange="onCheckoutSelectMember(this.value)">
+          ${memberOptions}
+        </select>
+      </div>
+      <div class="form-group" style="display:flex;align-items:flex-end;gap:16px">
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;padding-bottom:6px">
+          <input type="checkbox" id="co_use_discount" checked onchange="updateCheckoutTotal()">
+          使用会员折扣
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;padding-bottom:6px" id="co_free_hours_label" ${preMember && preMember.free_hours > 0 ? '' : 'style="display:none"'}>
+          <input type="checkbox" id="co_use_free_hours" onchange="updateCheckoutTotal()">
+          免费时长抵扣 <span id="co_free_hours_count">${preMember ? preMember.free_hours : 0}h</span>
+        </label>
+      </div>
     </div>
+
+    <div class="settlement-summary" id="co_summary">
+    </div>
+
     <div class="form-row">
       <div class="form-group">
         <label class="form-label">额外收费 (小吃、饮料等)</label>
@@ -997,10 +1153,17 @@ async function showCheckoutModal(reservationId) {
           <option value="wechat">💚 微信支付</option>
           <option value="alipay">💙 支付宝</option>
           <option value="card">💳 银行卡</option>
-          <option value="member">🎫 会员卡</option>
         </select>
       </div>
     </div>
+
+    <div class="form-group" id="co_wallet_group" ${preMember ? '' : 'style="display:none"'}>
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+        <input type="checkbox" id="co_use_wallet" onchange="updateCheckoutTotal()">
+        <span>使用会员余额支付 <span id="co_wallet_balance" style="color:#16a34a;font-weight:600">${preMember ? fmtMoney(preMember.balance + (preMember.gift_balance || 0)) : ''}</span></span>
+      </label>
+    </div>
+
     <div class="form-group">
       <label class="form-label">备注</label>
       <input class="form-input" id="co_remark" placeholder="如有特殊情况请备注...">
@@ -1014,35 +1177,181 @@ async function showCheckoutModal(reservationId) {
   updateCheckoutTotal();
 }
 
-function updateCheckoutTotal() {
+function onCheckoutSelectMember(memberId) {
+  __checkoutCtx.selectedMemberId = memberId ? parseInt(memberId) : null;
+  __checkoutCtx.useWallet = false;
+  __checkoutCtx.useFreeHours = false;
+  const walletGroup = document.getElementById('co_wallet_group');
+  const freeHoursLabel = document.getElementById('co_free_hours_label');
+  const useWalletEl = document.getElementById('co_use_wallet');
+  const useFreeHoursEl = document.getElementById('co_use_free_hours');
+  if (useWalletEl) useWalletEl.checked = false;
+  if (useFreeHoursEl) useFreeHoursEl.checked = false;
+
+  if (memberId) {
+    const m = membersCache.find(x => x.id === parseInt(memberId));
+    if (m) {
+      walletGroup.style.display = 'block';
+      document.getElementById('co_wallet_balance').textContent = fmtMoney((m.balance || 0) + (m.gift_balance || 0));
+      if (m.free_hours > 0) {
+        freeHoursLabel.style.display = 'flex';
+        document.getElementById('co_free_hours_count').textContent = `${m.free_hours}h`;
+      } else {
+        freeHoursLabel.style.display = 'none';
+      }
+    }
+  } else {
+    walletGroup.style.display = 'none';
+    freeHoursLabel.style.display = 'none';
+  }
+  updateCheckoutTotal();
+}
+
+async function updateCheckoutTotal() {
   const extra = parseFloat(document.getElementById('extra_charge')?.value) || 0;
+  const useDiscount = document.getElementById('co_use_discount')?.checked;
+  const useWallet = document.getElementById('co_use_wallet')?.checked;
+  const useFreeHours = document.getElementById('co_use_free_hours')?.checked;
   const finalDiv = document.getElementById('checkoutFinal');
-  if (!__checkoutCtx || !finalDiv) return;
+  const summaryDiv = document.getElementById('co_summary');
+  if (!__checkoutCtx || !finalDiv || !summaryDiv) return;
 
-  const { base, discount, subtotal, paid, unpaidBeforeExtra } = __checkoutCtx;
-  const finalTotal = subtotal + extra - paid;
+  const { r, hours, actualBase, bookedTotal, paid, base, discount, subtotal, unpaidBeforeExtra, selectedMemberId } = __checkoutCtx;
 
-  let breakdown = `费用 ${fmtMoney(subtotal)}`;
+  __checkoutCtx.useWallet = useWallet;
+  __checkoutCtx.useFreeHours = useFreeHours;
+
+  let memberDiscountAmount = r.member_discount || 0;
+  let memberDiscountInfo = r.member_discount_info || null;
+  let finalBaseAmount = base - discount;
+
+  if (selectedMemberId && useDiscount && !r.member_discount) {
+    const calc = await request(`${API}/members/calc-discount`, {
+      method: 'POST',
+      body: {
+        member_id: selectedMemberId,
+        base_amount: finalBaseAmount,
+        hours: hours,
+        extra_amount: extra,
+        use_free_hours: useFreeHours
+      }
+    });
+    if (calc) {
+      memberDiscountAmount = calc.discount_amount;
+      memberDiscountInfo = {
+        level_name: calc.level_name,
+        level_icon: calc.level_icon,
+        discount_rate: calc.discount_rate,
+        is_birthday: calc.is_birthday,
+        free_hours_used: calc.free_hours_used,
+        free_hours_discount: calc.free_hours_discount,
+        discount_amount: calc.discount_amount
+      };
+      if (useWallet && calc.balance_available) {
+        __checkoutCtx.balanceAvailable = calc.balance_available;
+      }
+    }
+  }
+
+  const totalBeforePaid = Math.max(0, finalBaseAmount - memberDiscountAmount + extra);
+  let unpaid = totalBeforePaid - paid;
+  let walletPay = 0;
+  let balanceAfterPay = 0;
+  let extraUnpaid = unpaid;
+  if (selectedMemberId && useWallet) {
+    const m = membersCache.find(x => x.id === parseInt(selectedMemberId));
+    if (m) {
+      const avail = (m.balance || 0) + (m.gift_balance || 0);
+      walletPay = Math.min(unpaid, avail);
+      balanceAfterPay = avail - walletPay;
+      unpaid = unpaid - walletPay;
+    }
+  }
+
+  __checkoutCtx.finalCalc = {
+    member_discount: memberDiscountAmount,
+    member_discount_info: memberDiscountInfo,
+    wallet_payment: walletPay,
+    final_total: totalBeforePaid,
+    points_earn: memberDiscountInfo && memberDiscountInfo.discount_rate
+      ? Math.floor(totalBeforePaid * (2 - (memberDiscountInfo.discount_rate || 1))) : 0
+  };
+
+  let summaryHtml = `
+    <div class="settlement-row"><span>入场时间</span><span>${fmtDT(r.checkin_time || r.start_time)}</span></div>
+    <div class="settlement-row"><span>当前时间</span><span>${fmtDT(new Date())}</span></div>
+    <div class="settlement-row"><span>实际观影时长</span><span style="font-weight:700;color:var(--primary)">${hours} 小时</span></div>
+    <div class="settlement-row"><span>包间单价</span><span>${fmtMoney(r.price_per_hour)} / 小时</span></div>
+    <div class="settlement-row"><span>按实际时长计费 (${hours}h × ${fmtMoney(r.price_per_hour)})</span><span>${fmtMoney(actualBase)}</span></div>
+    <div class="settlement-row"><span>预约时预估费用</span><span>${fmtMoney(bookedTotal)}</span></div>
+    ${discount > 0 ? `<div class="settlement-row" style="color:var(--success)"><span>优惠减免 (按预约价计)</span><span>- ${fmtMoney(discount)}</span></div>` : ''}
+  `;
+
+  if (memberDiscountAmount > 0) {
+    const info = memberDiscountInfo || {};
+    const tags = [];
+    if (info.level_name) tags.push(`${info.level_icon || ''} ${info.level_name} ${Math.round((info.discount_rate || 1) * 100)}%`);
+    if (info.is_birthday) tags.push('<span style="color:#dc2626">🎂 生日特惠</span>');
+    if (info.free_hours_used) tags.push(`<span style="color:#0ea5e9">免费时长-${info.free_hours_used}h (-${fmtMoney(info.free_hours_discount || 0)})</span>`);
+    summaryHtml += `
+      <div class="settlement-row" style="background:#f0fdf4;padding:8px;border-radius:6px">
+        <span>会员优惠 ${tags.length ? `(${tags.join(' · ')})` : ''}</span>
+        <span style="color:#dc2626">-${fmtMoney(memberDiscountAmount)}</span>
+      </div>
+    `;
+  }
+
+  if (extra > 0) {
+    summaryHtml += `<div class="settlement-row"><span>附加费用 (商品等)</span><span>+${fmtMoney(extra)}</span></div>`;
+  }
+
+  summaryHtml += `
+    <div class="settlement-row"><span>费用合计</span><span style="font-weight:700">${fmtMoney(totalBeforePaid)}</span></div>
+    <div class="settlement-row"><span>已支付金额</span><span style="color:var(--success);font-weight:600">- ${fmtMoney(paid)}</span></div>
+  `;
+
+  if (walletPay > 0) {
+    summaryHtml += `<div class="settlement-row" style="background:#eff6ff;padding:8px;border-radius:6px">
+      <span>会员余额抵扣</span><span style="color:#2563eb">-${fmtMoney(walletPay)} (剩余${fmtMoney(balanceAfterPay)})</span>
+    </div>`;
+  }
+
+  summaryHtml += `<div class="settlement-row total"><span>本次应付现金</span><span>${fmtMoney(Math.max(0, unpaid))}</span></div>`;
+  summaryDiv.innerHTML = summaryHtml;
+
+  let breakdown = `合计 ${fmtMoney(totalBeforePaid)}`;
   if (extra > 0) breakdown += ` + 附加 ${fmtMoney(extra)}`;
+  if (memberDiscountAmount > 0) breakdown += ` - 会员优惠 ${fmtMoney(memberDiscountAmount)}`;
   if (paid > 0) breakdown += ` - 已付 ${fmtMoney(paid)}`;
-
-  finalDiv.textContent = `最终应付: ${fmtMoney(Math.max(0, finalTotal))}`;
+  if (walletPay > 0) breakdown += ` - 钱包 ${fmtMoney(walletPay)}`;
+  finalDiv.textContent = `最终应付: ${fmtMoney(Math.max(0, unpaid))}`;
   finalDiv.title = breakdown;
 }
 
 async function submitCheckout(id) {
+  const extra = parseFloat(document.getElementById('extra_charge').value) || 0;
+  const memberId = document.getElementById('co_member').value ? parseInt(document.getElementById('co_member').value) : null;
+  const useFreeHours = document.getElementById('co_use_free_hours')?.checked;
+  const useWallet = document.getElementById('co_use_wallet')?.checked;
+
   const data = {
-    extra_charge: parseFloat(document.getElementById('extra_charge').value) || 0,
+    extra_charge: extra,
     payment_method: document.getElementById('payment_method').value,
-    remark: document.getElementById('co_remark').value.trim()
+    remark: document.getElementById('co_remark').value.trim(),
+    member_id: memberId,
+    use_wallet_payment: memberId && useWallet,
+    use_free_hours_checkout: useFreeHours
   };
   const result = await request(`${API}/checkout/${id}`, { method: 'POST', body: data });
   if (result) {
     const d = result;
-    let detail = `实收 ${fmtMoney(d.unpaid_amount)}`;
-    if (d.discount && d.discount > 0) detail += `，优惠 ${fmtMoney(d.discount)}`;
+    let detail = `现金实收 ${fmtMoney(d.unpaid_amount)}`;
+    if (d.wallet_payment > 0) detail += `，余额支付${fmtMoney(d.wallet_payment)}`;
+    if (d.member_discount && d.member_discount > 0) detail += `，会员优惠${fmtMoney(d.member_discount)}`;
+    if (d.discount && d.discount > 0) detail += `，减免 ${fmtMoney(d.discount)}`;
     if (d.extra_charge && d.extra_charge > 0) detail += `，附加 ${fmtMoney(d.extra_charge)}`;
     detail += `。共消费 ${d.actual_hours} 小时`;
+    if (d.points_earned > 0) detail += `，获得${d.points_earned}积分`;
     showToast(`✅ 结算成功！${detail}，感谢惠顾！`, 'success');
     __checkoutCtx = null;
     closeModal();
@@ -2811,6 +3120,10 @@ function renderPage(page) {
     case 'checkin': return renderCheckin();
     case 'checkout': return renderCheckout();
     case 'transactions': return renderTransactions();
+    case 'members': return renderMembers();
+    case 'member-levels': return renderMemberLevels();
+    case 'member-packages': return renderMemberPackages();
+    case 'member-detail': return renderMemberDetail(currentMemberId);
     case 'inspection': return renderInspectionDashboard();
     case 'devices': return renderDevices();
     case 'inspection-register': return renderInspectionRegister();
@@ -2818,6 +3131,956 @@ function renderPage(page) {
     case 'ledger': return renderLedger();
     case 'rankings': return renderRankings();
     default: return renderDashboard();
+  }
+}
+
+// ==================== 会员管理 ====================
+
+async function loadMembersCache() {
+  const data = await request(`${API}/members?page_size=1000`);
+  if (data) membersCache = data.list || [];
+  return membersCache;
+}
+
+function memberLevelBadge(level, icon, discountRate) {
+  const colors = {
+    1: 'bg-gray-100 text-gray-700',
+    2: 'bg-slate-200 text-slate-800',
+    3: 'bg-yellow-100 text-yellow-800',
+    4: 'bg-gradient-to-r from-cyan-400 to-blue-500 text-white'
+  };
+  const cls = colors[level] || colors[1];
+  return `<span class="level-badge ${cls}" title="折扣: ${Math.round(discountRate * 100)}%">${icon || ''} ${discountRate ? Math.round(discountRate * 100) + '%' : ''}</span>`;
+}
+
+function memberWalletLogTypeText(type) {
+  const map = {
+    recharge: '充值',
+    consume: '消费',
+    level_up: '等级升级',
+    bonus: '赠送',
+    refund: '退款'
+  };
+  return map[type] || type;
+}
+
+async function renderMembers() {
+  setActivePage('members', '会员管理');
+  const levels = await request(`${API}/member-levels`);
+  const data = await request(`${API}/members?page_size=100`);
+  if (!data) return;
+  membersCache = data.list || [];
+
+  const levelsFilter = levels ? levels.map(l =>
+    `<div class="category-tab" onclick="filterMembers('level', ${l.id}, this)">${l.icon} ${l.name} (${l.member_count || 0})</div>`
+  ).join('') : '';
+
+  document.getElementById('pageContent').innerHTML = `
+    <div class="filter-bar">
+      <div style="flex:1">
+        <div class="category-tabs">
+          <div class="category-tab active" onclick="filterMembers('all', null, this)">全部 (${data.total || 0})</div>
+          <div class="category-tab" onclick="filterMembers('active', null, this)">有效会员</div>
+          ${levelsFilter}
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <input type="text" class="input" placeholder="搜索姓名/手机号..." id="memberSearchInput" oninput="searchMembers(this.value)">
+        <button class="btn btn-primary" onclick="showAddMemberModal()">➕ 会员开户</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-body">
+        <div id="membersTable">
+          ${renderMembersTable(data.list)}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderMembersTable(members) {
+  if (!members || members.length === 0) {
+    return '<div class="empty-state"><div class="empty-state-icon">👥</div>暂无会员数据，点击右上角"会员开户"添加</div>';
+  }
+
+  return `
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>会员ID</th>
+          <th>姓名</th>
+          <th>手机号</th>
+          <th>等级</th>
+          <th>余额</th>
+          <th>赠金</th>
+          <th>免费时长</th>
+          <th>积分</th>
+          <th>累计消费</th>
+          <th>订单数</th>
+          <th>注册时间</th>
+          <th>操作</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${members.map(m => `
+          <tr onclick="showMemberDetail(${m.id})" style="cursor:pointer">
+            <td>#${m.id}</td>
+            <td><strong>${m.name}</strong> ${checkBirthdayToday(m.birthday) ? '🎂' : ''}</td>
+            <td>${m.phone}</td>
+            <td>${m.level_icon} ${m.level_name}</td>
+            <td style="color:#16a34a;font-weight:600">${fmtMoney(m.balance)}</td>
+            <td style="color:#64748b">${fmtMoney(m.gift_balance)}</td>
+            <td style="color:#0ea5e9">${m.free_hours}h</td>
+            <td>${m.total_points || 0}</td>
+            <td>${fmtMoney(m.total_spent || 0)}</td>
+            <td>${m.order_count || 0}</td>
+            <td>${fmtDT(m.created_at)}</td>
+            <td>
+              <button class="btn btn-sm btn-outline" onclick="event.stopPropagation();showRechargeModal(${m.id})">充值</button>
+              <button class="btn btn-sm btn-primary" onclick="event.stopPropagation();showMemberDetail(${m.id})">详情</button>
+            </td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `;
+}
+
+function checkBirthdayToday(birthdayStr) {
+  if (!birthdayStr) return false;
+  const today = new Date();
+  const b = new Date(birthdayStr);
+  return today.getMonth() === b.getMonth() && today.getDate() === b.getDate();
+}
+
+let memberFilter = { type: 'all', value: null };
+async function filterMembers(type, value, el) {
+  document.querySelectorAll('.category-tab').forEach(t => t.classList.remove('active'));
+  if (el) el.classList.add('active');
+  memberFilter = { type, value };
+  const keyword = document.getElementById('memberSearchInput')?.value || '';
+  await doMemberSearch(keyword);
+}
+
+async function searchMembers(kw) {
+  await doMemberSearch(kw);
+}
+
+async function doMemberSearch(keyword) {
+  let url = `${API}/members?page_size=100`;
+  if (keyword) url += `&keyword=${encodeURIComponent(keyword)}`;
+  if (memberFilter.type === 'level' && memberFilter.value) url += `&level_id=${memberFilter.value}`;
+  if (memberFilter.type === 'active') url += `&status=active`;
+
+  const data = await request(url);
+  if (data) {
+    document.getElementById('membersTable').innerHTML = renderMembersTable(data.list);
+  }
+}
+
+function showAddMemberModal() {
+  showModal(`
+    <div class="form-grid">
+      <div class="form-group">
+        <label>姓名 *</label>
+        <input type="text" class="input" id="newMemberName" placeholder="请输入姓名">
+      </div>
+      <div class="form-group">
+        <label>手机号 *</label>
+        <input type="tel" class="input" id="newMemberPhone" placeholder="请输入手机号">
+      </div>
+      <div class="form-group">
+        <label>性别</label>
+        <select class="input" id="newMemberGender">
+          <option value="男">男</option>
+          <option value="女">女</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>生日</label>
+        <input type="date" class="input" id="newMemberBirthday">
+      </div>
+      <div class="form-group">
+        <label>邮箱</label>
+        <input type="email" class="input" id="newMemberEmail" placeholder="选填">
+      </div>
+      <div class="form-group">
+        <label>开户赠送金额(元)</label>
+        <input type="number" class="input" id="newMemberInitialBalance" placeholder="0" value="0" min="0">
+      </div>
+      <div class="form-group" style="grid-column:1/-1">
+        <label>地址</label>
+        <input type="text" class="input" id="newMemberAddress" placeholder="选填">
+      </div>
+      <div class="form-group" style="grid-column:1/-1">
+        <label>备注</label>
+        <textarea class="input" id="newMemberRemark" rows="2"></textarea>
+      </div>
+    </div>
+    ${modalFooter([
+      { text: '取消', onclick: 'closeModal()' },
+      { text: '确认开户', class: 'btn-primary', onclick: 'submitAddMember()' }
+    ])}
+  `, '➕ 会员开户');
+}
+
+async function submitAddMember() {
+  const name = document.getElementById('newMemberName').value.trim();
+  const phone = document.getElementById('newMemberPhone').value.trim();
+  if (!name || !phone) {
+    showToast('姓名和手机号必填', 'warning');
+    return;
+  }
+  if (!/^1\d{10}$/.test(phone)) {
+    showToast('手机号格式不正确', 'warning');
+    return;
+  }
+
+  const data = await request(`${API}/members`, {
+    method: 'POST',
+    body: {
+      name,
+      phone,
+      gender: document.getElementById('newMemberGender').value,
+      birthday: document.getElementById('newMemberBirthday').value,
+      email: document.getElementById('newMemberEmail').value.trim(),
+      address: document.getElementById('newMemberAddress').value.trim(),
+      remark: document.getElementById('newMemberRemark').value.trim(),
+      initial_balance: parseFloat(document.getElementById('newMemberInitialBalance').value) || 0
+    }
+  });
+  if (data) {
+    showToast('会员开户成功', 'success');
+    closeModal();
+    renderMembers();
+  }
+}
+
+function showMemberDetail(id) {
+  currentMemberId = id;
+  setActivePage('member-detail', '会员详情');
+  renderMemberDetail(id);
+}
+
+async function renderMemberDetail(id) {
+  if (!id) return;
+  currentMemberId = id;
+  const data = await request(`${API}/members/${id}`);
+  if (!data) return;
+
+  const reservations = data.reservations || [];
+  const walletLogs = data.wallet_logs || [];
+  const stats = data.stats || {};
+
+  const favMoviesHtml = stats.fav_movies && stats.fav_movies.length ?
+    stats.fav_movies.map(m => `<span class="tag">🎬 ${m.title} (${m.watch_count}次)</span>`).join('') :
+    '<span class="tag-muted">暂无</span>';
+
+  const benefitsHtml = data.benefits && data.benefits.length ?
+    data.benefits.map(b => `<div class="benefit-item">✓ ${b}</div>`).join('') : '';
+
+  const walletLogsHtml = walletLogs.length ?
+    walletLogs.map(l => `
+      <div class="wallet-log-item">
+        <div class="wallet-log-type ${l.type}">${memberWalletLogTypeText(l.type)}</div>
+        <div class="wallet-log-info">
+          <div>${l.description}</div>
+          <small style="color:#94a3b8">${fmtDT(l.created_at)} · ${l.operator || '系统'}</small>
+        </div>
+        <div class="wallet-log-amount ${l.amount > 0 || l.gift_amount > 0 ? 'positive' : l.amount < 0 ? 'negative' : ''}">
+          ${l.amount > 0 ? `+${fmtMoney(l.amount)}` : l.amount < 0 ? fmtMoney(l.amount) : ''}
+          ${l.gift_amount > 0 ? `<span style="color:#64748b;font-size:12px"> +赠${l.gift_amount}</span>` : ''}
+          ${l.free_hours_delta ? `<span style="color:#0ea5e9;font-size:12px"> ${l.free_hours_delta > 0 ? '+' : ''}${l.free_hours_delta}h</span>` : ''}
+        </div>
+      </div>
+    `).join('') : '<div class="empty-state-sm">暂无资金变动记录</div>';
+
+  const ordersHtml = reservations.length ?
+    reservations.slice(0, 20).map(r => `
+      <div class="order-item" onclick="event.stopPropagation();showReservationDetail(${r.id})">
+        <div>
+          <div style="font-weight:600">#${r.id} ${r.room_name} ${r.room_type || ''}</div>
+          <small style="color:#64748b">${fmtDT(r.start_time)} · ${r.movie_title || '未选片'}</small>
+        </div>
+        <div style="text-align:right">
+          <div class="order-status ${r.status}">${statusText(r.status)}</div>
+          <small style="color:#16a34a;font-weight:600">${fmtMoney(r.total_amount || 0)}</small>
+        </div>
+      </div>
+    `).join('') : '<div class="empty-state-sm">暂无订单记录</div>';
+
+  document.getElementById('pageContent').innerHTML = `
+    <div style="margin-bottom:12px">
+      <button class="btn btn-outline btn-sm" onclick="renderMembers()">← 返回会员列表</button>
+    </div>
+
+    <div class="member-detail-header">
+      <div class="member-avatar">${(data.name || '?').charAt(0)}</div>
+      <div class="member-info-main">
+        <div style="display:flex;align-items:center;gap:12px">
+          <h2 style="margin:0">${data.name}</h2>
+          <span class="level-badge" style="font-size:14px;padding:4px 12px">${data.level_icon} ${data.level_name}</span>
+          ${checkBirthdayToday(data.birthday) ? '<span class="birthday-badge">🎂 今日生日</span>' : ''}
+        </div>
+        <div style="color:#64748b;margin-top:6px">
+          📱 ${data.phone} ${data.gender ? '· ' + data.gender : ''} ${data.birthday ? '· 🎂 ' + data.birthday : ''}
+          ${data.email ? '· ✉️ ' + data.email : ''}
+        </div>
+        <div style="color:#94a3b8;margin-top:4px;font-size:13px">
+          ID: #${data.id} · 注册于 ${fmtDT(data.created_at)} · 累计消费 ${fmtMoney(stats.total_spent || 0)} · ${stats.total_orders || 0}单 · ${stats.total_watch_hours || 0}小时
+        </div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-success" onclick="showRechargeModal(${data.id})">💰 充值</button>
+        <button class="btn btn-primary" onclick="showEditMemberModal(${data.id})">✏️ 编辑</button>
+      </div>
+    </div>
+
+    <div class="stats-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:20px">
+      <div class="stat-card green">
+        <div class="stat-label">账户余额</div>
+        <div class="stat-value" style="color:#16a34a">${fmtMoney(data.wallet?.balance || 0)}</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">赠送金额</div>
+        <div class="stat-value" style="color:#64748b">${fmtMoney(data.wallet?.gift_balance || 0)}</div>
+      </div>
+      <div class="stat-card blue">
+        <div class="stat-label">免费时长</div>
+        <div class="stat-value" style="color:#2563eb">${data.wallet?.free_hours || 0}<span class="stat-unit">小时</span></div>
+      </div>
+      <div class="stat-card orange">
+        <div class="stat-label">累计积分</div>
+        <div class="stat-value" style="color:#ea580c">${data.total_points || 0}<span class="stat-unit">分</span></div>
+      </div>
+    </div>
+
+    <div class="two-col">
+      <div class="card">
+        <div class="card-header"><h3>⭐ 等级权益</h3></div>
+        <div class="card-body">
+          <div class="level-info-box">
+            <div style="margin-bottom:12px">
+              <strong>${data.level_name}</strong>
+              <p style="color:#64748b;margin:4px 0 0;font-size:13px">${data.level_description || ''}</p>
+            </div>
+            <div style="display:flex;gap:16px;font-size:14px;margin-bottom:12px">
+              <span>🎁 折扣: <strong>${Math.round((data.discount_rate || 1) * 100)}%</strong></span>
+              <span>🎂 生日折扣: <strong>${Math.round((data.birthday_discount || 1) * 100)}%</strong></span>
+              <span>💰 积分倍率: <strong>${data.points_per_yuan || 1}x</strong></span>
+            </div>
+            <div class="benefits-list">${benefitsHtml}</div>
+          </div>
+          <div style="margin-top:16px">
+            <h4 style="margin:0 0 8px">🎬 观影偏好</h4>
+            <div class="tags-wrap">${favMoviesHtml}</div>
+          </div>
+          ${data.remark ? `<div style="margin-top:16px"><strong>备注:</strong> <span style="color:#64748b">${data.remark}</span></div>` : ''}
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <h3>📋 历史订单 (${reservations.length})</h3>
+          ${reservations.length > 20 ? `<button class="btn btn-sm btn-outline" onclick="showMemberOrders(${data.id})">查看全部 →</button>` : ''}
+        </div>
+        <div class="card-body" style="max-height:380px;overflow-y:auto">
+          ${ordersHtml}
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:20px">
+      <div class="card-header"><h3>💰 资金变动记录</h3></div>
+      <div class="card-body" style="max-height:350px;overflow-y:auto">
+        ${walletLogsHtml}
+      </div>
+    </div>
+  `;
+}
+
+function showEditMemberModal(id) {
+  const m = membersCache.find(x => x.id === id);
+  if (!m) return;
+  showModal(`
+    <div class="form-grid">
+      <div class="form-group">
+        <label>姓名 *</label>
+        <input type="text" class="input" id="editMemberName" value="${m.name}">
+      </div>
+      <div class="form-group">
+        <label>手机号 *</label>
+        <input type="tel" class="input" id="editMemberPhone" value="${m.phone}">
+      </div>
+      <div class="form-group">
+        <label>性别</label>
+        <select class="input" id="editMemberGender">
+          <option ${m.gender === '男' ? 'selected' : ''}>男</option>
+          <option ${m.gender === '女' ? 'selected' : ''}>女</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>生日</label>
+        <input type="date" class="input" id="editMemberBirthday" value="${m.birthday || ''}">
+      </div>
+      <div class="form-group">
+        <label>邮箱</label>
+        <input type="email" class="input" id="editMemberEmail" value="${m.email || ''}">
+      </div>
+      <div class="form-group">
+        <label>状态</label>
+        <select class="input" id="editMemberStatus">
+          <option value="active" ${m.status === 'active' ? 'selected' : ''}>正常</option>
+          <option value="frozen" ${m.status === 'frozen' ? 'selected' : ''}>已冻结</option>
+          <option value="cancelled" ${m.status === 'cancelled' ? 'selected' : ''}>已注销</option>
+        </select>
+      </div>
+      <div class="form-group" style="grid-column:1/-1">
+        <label>地址</label>
+        <input type="text" class="input" id="editMemberAddress" value="${m.address || ''}">
+      </div>
+      <div class="form-group" style="grid-column:1/-1">
+        <label>备注</label>
+        <textarea class="input" id="editMemberRemark" rows="2">${m.remark || ''}</textarea>
+      </div>
+    </div>
+    ${modalFooter([
+      { text: '取消', onclick: 'closeModal()' },
+      { text: '保存', class: 'btn-primary', onclick: `submitEditMember(${id})` }
+    ])}
+  `, '编辑会员信息');
+}
+
+async function submitEditMember(id) {
+  const name = document.getElementById('editMemberName').value.trim();
+  const phone = document.getElementById('editMemberPhone').value.trim();
+  if (!name || !phone) { showToast('姓名和手机号必填', 'warning'); return; }
+  if (!/^1\d{10}$/.test(phone)) { showToast('手机号格式不正确', 'warning'); return; }
+
+  const result = await request(`${API}/members/${id}`, {
+    method: 'PUT',
+    body: {
+      name, phone,
+      gender: document.getElementById('editMemberGender').value,
+      birthday: document.getElementById('editMemberBirthday').value,
+      email: document.getElementById('editMemberEmail').value.trim(),
+      address: document.getElementById('editMemberAddress').value.trim(),
+      status: document.getElementById('editMemberStatus').value,
+      remark: document.getElementById('editMemberRemark').value.trim()
+    }
+  });
+  if (result) {
+    showToast('会员信息已更新', 'success');
+    closeModal();
+    renderMemberDetail(id);
+  }
+}
+
+function showRechargeModal(memberId) {
+  const m = membersCache.find(x => x.id === memberId);
+  if (!m) return;
+
+  showModal(`
+    <div class="form-grid">
+      <div class="form-group" style="grid-column:1/-1">
+        <label>会员: <strong>${m.name}</strong> · ${m.phone} · 当前余额: <span style="color:#16a34a">${fmtMoney(m.balance || 0)}</span></label>
+      </div>
+      <div class="form-group" style="grid-column:1/-1">
+        <label>选择储值套餐</label>
+        <div id="packagesList" style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px"></div>
+      </div>
+      <div style="grid-column:1/-1;text-align:center;color:#94a3b8;margin:8px 0">— 或手动充值 —</div>
+      <div class="form-group">
+        <label>充值金额(元)</label>
+        <input type="number" class="input" id="rechargeAmount" placeholder="0" min="0" oninput="updateRechargePreview()">
+      </div>
+      <div class="form-group">
+        <label>赠送金额(元)</label>
+        <input type="number" class="input" id="rechargeGift" placeholder="0" min="0" value="0" oninput="updateRechargePreview()">
+      </div>
+      <div class="form-group">
+        <label>赠送免费时长(小时)</label>
+        <input type="number" class="input" id="rechargeFreeHours" placeholder="0" min="0" value="0">
+      </div>
+      <div class="form-group">
+        <label>选择套餐ID</label>
+        <input type="text" class="input" id="rechargePackageId" placeholder="留空则使用手动充值" readonly>
+      </div>
+      <div class="form-group" style="grid-column:1/-1">
+        <label>备注</label>
+        <input type="text" class="input" id="rechargeRemark" placeholder="选填">
+      </div>
+      <div class="form-group" style="grid-column:1/-1">
+        <div id="rechargePreview" class="recharge-preview">
+          <div>充值后余额: <strong>${fmtMoney(m.balance || 0)}</strong></div>
+        </div>
+      </div>
+    </div>
+    ${modalFooter([
+      { text: '取消', onclick: 'closeModal()' },
+      { text: '确认充值', class: 'btn-success', onclick: `submitRecharge(${memberId})` }
+    ])}
+  `, `💰 充值 - ${m.name}`, true);
+
+  loadPackagesForRecharge(memberId, m);
+}
+
+async function loadPackagesForRecharge(memberId, member) {
+  const packages = await request(`${API}/member-packages`);
+  if (!packages) return;
+  const container = document.getElementById('packagesList');
+  if (!container) return;
+
+  container.innerHTML = packages.filter(p => p.is_active).map(p => {
+    const canUse = (member.level_level || 1) >= p.level_required;
+    return `
+      <div class="package-card ${canUse ? '' : 'disabled'}" onclick="${canUse ? `selectPackage(${p.id}, ${p.price}, ${p.bonus}, ${p.gift_hours})` : ''}">
+        <div class="package-name">${p.name}</div>
+        <div class="package-price">${fmtMoney(p.price)}</div>
+        <div class="package-gift">${p.gift_desc || `送${p.bonus}元`}</div>
+        ${!canUse ? `<div class="package-lock">🔒 需要${p.level_name}</div>` : ''}
+      </div>
+    `;
+  }).join('');
+}
+
+function selectPackage(pkgId, price, bonus, giftHours) {
+  document.getElementById('rechargePackageId').value = pkgId;
+  document.getElementById('rechargeAmount').value = price;
+  document.getElementById('rechargeGift').value = bonus;
+  document.getElementById('rechargeFreeHours').value = giftHours;
+  document.querySelectorAll('.package-card').forEach(el => el.classList.remove('selected'));
+  event.currentTarget.classList.add('selected');
+  updateRechargePreview();
+}
+
+function updateRechargePreview() {
+  const m = membersCache.find(x => x.id === currentMemberId);
+  if (!m) return;
+  const amount = parseFloat(document.getElementById('rechargeAmount')?.value) || 0;
+  const gift = parseFloat(document.getElementById('rechargeGift')?.value) || 0;
+  const freeHours = parseInt(document.getElementById('rechargeFreeHours')?.value) || 0;
+  const preview = document.getElementById('rechargePreview');
+  if (!preview) return;
+  preview.innerHTML = `
+    <div>充值金额: <strong>${fmtMoney(amount)}</strong></div>
+    <div>赠送金额: <strong style="color:#64748b">+${fmtMoney(gift)}</strong></div>
+    ${freeHours > 0 ? `<div>免费时长: <strong style="color:#2563eb">+${freeHours}小时</strong></div>` : ''}
+    <div style="border-top:1px dashed #e2e8f0;padding-top:8px;margin-top:8px">
+      新余额: <strong style="color:#16a34a">${fmtMoney((m.balance || 0) + amount)}</strong> · 
+      赠金: <strong style="color:#64748b">${fmtMoney((m.gift_balance || 0) + gift)}</strong>
+    </div>
+  `;
+}
+
+async function submitRecharge(memberId) {
+  const pkgId = document.getElementById('rechargePackageId').value;
+  const body = {};
+  if (pkgId) {
+    body.package_id = parseInt(pkgId);
+  } else {
+    body.amount = parseFloat(document.getElementById('rechargeAmount').value) || 0;
+    body.gift_amount = parseFloat(document.getElementById('rechargeGift').value) || 0;
+    body.gift_hours = parseInt(document.getElementById('rechargeFreeHours').value) || 0;
+    if (body.amount <= 0 && body.gift_amount <= 0 && body.gift_hours <= 0) {
+      showToast('请填写充值金额或选择套餐', 'warning');
+      return;
+    }
+  }
+  body.remark = document.getElementById('rechargeRemark').value.trim();
+
+  const result = await request(`${API}/members/${memberId}/recharge`, {
+    method: 'POST',
+    body
+  });
+  if (result) {
+    showToast('充值成功！' + (result.free_hours ? ` 赠送${result.free_hours}小时` : ''), 'success');
+    closeModal();
+    if (currentPage === 'member-detail') {
+      renderMemberDetail(memberId);
+    } else {
+      renderMembers();
+    }
+  }
+}
+
+async function showMemberOrders(id) {
+  const data = await request(`${API}/members/${id}/orders?page_size=100`);
+  if (!data) return;
+  const summary = data.summary || {};
+
+  const ordersHtml = data.list.length ? data.list.map(r => `
+    <div class="order-item">
+      <div>
+        <div style="font-weight:600">#${r.id} ${r.room_name} ${r.room_type || ''}</div>
+        <small style="color:#64748b">${fmtDT(r.created_at)}</small>
+        <div style="margin-top:4px">
+          <small>🎬 ${r.movie_title || '未选片'} · ${fmtDT(r.start_time)} - ${fmtTime(r.end_time)}</small>
+        </div>
+      </div>
+      <div style="text-align:right">
+        <div class="order-status ${r.status}">${statusText(r.status)}</div>
+        <div style="margin-top:4px">
+          ${r.original_amount && r.original_amount > r.total_amount ?
+            `<small style="color:#94a3b8;text-decoration:line-through">${fmtMoney(r.original_amount)}</small> ` : ''}
+          <strong style="color:#16a34a">${fmtMoney(r.total_amount || 0)}</strong>
+        </div>
+        ${r.wallet_deduction ? `<small style="color:#2563eb">钱包抵扣${fmtMoney(r.wallet_deduction)}</small>` : ''}
+      </div>
+    </div>
+  `).join('') : '<div class="empty-state-sm">暂无订单</div>';
+
+  showModal(`
+    <div class="stats-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:16px">
+      <div class="stat-card" style="padding:12px"><div class="stat-label">总订单</div><div class="stat-value" style="font-size:22px">${summary.total_orders || 0}</div></div>
+      <div class="stat-card green" style="padding:12px"><div class="stat-label">已完成</div><div class="stat-value" style="font-size:22px;color:#16a34a">${summary.completed_orders || 0}</div></div>
+      <div class="stat-card orange" style="padding:12px"><div class="stat-label">累计消费</div><div class="stat-value" style="font-size:22px;color:#ea580c">${fmtMoney(summary.total_spent || 0)}</div></div>
+      <div class="stat-card blue" style="padding:12px"><div class="stat-label">观影时长</div><div class="stat-value" style="font-size:22px;color:#2563eb">${summary.total_hours || 0}h</div></div>
+    </div>
+    <div style="max-height:400px;overflow-y:auto">${ordersHtml}</div>
+  `, `📋 会员订单 (${data.total || 0})`, true);
+}
+
+// ==================== 会员等级设置 ====================
+
+async function renderMemberLevels() {
+  setActivePage('member-levels', '等级设置');
+  const levels = await request(`${API}/member-levels`);
+  if (!levels) return;
+
+  document.getElementById('pageContent').innerHTML = `
+    <div class="levels-grid">
+      ${levels.map(l => `
+        <div class="level-card" data-level="${l.level}">
+          <div class="level-card-header">
+            <div class="level-card-icon">${l.icon}</div>
+            <div>
+              <h3 style="margin:0">${l.name}</h3>
+              <small style="color:#94a3b8">累计消费满 ${l.min_points} 元升级</small>
+            </div>
+            <div style="color:#64748b;font-size:13px">
+              ${l.member_count || 0} 名会员
+            </div>
+          </div>
+          <div class="level-card-body">
+            <div class="level-config-row">
+              <span>🎁 普通折扣</span>
+              <strong>${Math.round((l.discount_rate || 1) * 100)}%</strong>
+            </div>
+            <div class="level-config-row">
+              <span>🎂 生日折扣</span>
+              <strong>${Math.round((l.birthday_discount || 1) * 100)}%</strong>
+            </div>
+            <div class="level-config-row">
+              <span>💰 积分倍率</span>
+              <strong>${l.points_per_yuan || 1}x</strong>
+            </div>
+            <div style="margin-top:12px">
+              <div style="font-size:13px;color:#64748b;margin-bottom:6px">专属权益:</div>
+              <div class="benefits-list-small">
+                ${(l.benefits || []).map(b => `<div class="benefit-item-small">✓ ${b}</div>`).join('')}
+              </div>
+            </div>
+            <p style="color:#94a3b8;margin:12px 0 0;font-size:12px">${l.description || ''}</p>
+          </div>
+          <div class="level-card-footer">
+            <button class="btn btn-sm btn-outline" onclick="showEditLevelModal(${l.id})">⚙️ 编辑配置</button>
+          </div>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
+function showEditLevelModal(id) {
+  showModal(`
+    <div id="editLevelForm"></div>
+  `, '编辑等级配置');
+  loadAndRenderLevelForm(id);
+}
+
+async function loadAndRenderLevelForm(id) {
+  const levels = await request(`${API}/member-levels`);
+  const l = levels?.find(x => x.id === id);
+  if (!l) return;
+  const container = document.getElementById('editLevelForm');
+  if (!container) return;
+
+  container.innerHTML = `
+    <div class="form-grid">
+      <div class="form-group">
+        <label>普通折扣率 (0-1, 例如 0.9 = 9折)</label>
+        <input type="number" step="0.01" min="0" max="1" class="input" id="levelDiscount" value="${l.discount_rate}">
+      </div>
+      <div class="form-group">
+        <label>生日折扣率</label>
+        <input type="number" step="0.01" min="0" max="1" class="input" id="levelBirthdayDiscount" value="${l.birthday_discount}">
+      </div>
+      <div class="form-group">
+        <label>积分倍率 (每消费1元获得积分数)</label>
+        <input type="number" step="0.1" min="0" class="input" id="levelPointsPerYuan" value="${l.points_per_yuan}">
+      </div>
+      <div class="form-group">
+        <label>升级门槛 (累计消费金额)</label>
+        <input type="number" min="0" class="input" id="levelMinPoints" value="${l.min_points}">
+      </div>
+      <div class="form-group" style="grid-column:1/-1">
+        <label>等级描述</label>
+        <textarea class="input" id="levelDesc" rows="2">${l.description || ''}</textarea>
+      </div>
+      <div class="form-group" style="grid-column:1/-1">
+        <label>权益列表 (每行一条)</label>
+        <textarea class="input" id="levelBenefits" rows="4">${(l.benefits || []).join('\n')}</textarea>
+      </div>
+    </div>
+    ${modalFooter([
+      { text: '取消', onclick: 'closeModal()' },
+      { text: '保存配置', class: 'btn-primary', onclick: `submitEditLevel(${id})` }
+    ])}
+  `;
+}
+
+async function submitEditLevel(id) {
+  const benefitsText = document.getElementById('levelBenefits').value;
+  const benefits = benefitsText.split('\n').map(s => s.trim()).filter(Boolean);
+
+  const result = await request(`${API}/member-levels/${id}`, {
+    method: 'PUT',
+    body: {
+      discount_rate: parseFloat(document.getElementById('levelDiscount').value),
+      birthday_discount: parseFloat(document.getElementById('levelBirthdayDiscount').value),
+      points_per_yuan: parseFloat(document.getElementById('levelPointsPerYuan').value),
+      min_points: parseInt(document.getElementById('levelMinPoints').value) || 0,
+      benefits,
+      description: document.getElementById('levelDesc').value.trim()
+    }
+  });
+  if (result) {
+    showToast('等级配置已更新', 'success');
+    closeModal();
+    renderMemberLevels();
+  }
+}
+
+// ==================== 储值套餐管理 ====================
+
+async function renderMemberPackages() {
+  setActivePage('member-packages', '储值套餐');
+  const packages = await request(`${API}/member-packages`);
+  const levels = await request(`${API}/member-levels`);
+  if (!packages) return;
+
+  document.getElementById('pageContent').innerHTML = `
+    <div class="filter-bar">
+      <div style="flex:1">
+        <p style="color:#64748b;margin:0">配置会员储值套餐，支持赠送金额和免费时长，可指定购买等级门槛</p>
+      </div>
+      <button class="btn btn-primary" onclick="showAddPackageModal()">➕ 新增套餐</button>
+    </div>
+
+    <div class="levels-grid">
+      ${packages.map(p => `
+        <div class="package-card-lg">
+          <div class="package-card-header">
+            <h3 style="margin:0">${p.name}</h3>
+            <span class="level-tag">${p.level_name || '通用'}+</span>
+          </div>
+          <div style="text-align:center;margin:16px 0">
+            <div class="package-lg-price">${fmtMoney(p.price)}</div>
+            <div style="color:#16a34a;font-size:16px;font-weight:600;margin-top:4px">${p.gift_desc || ''}</div>
+          </div>
+          <div style="display:flex;justify-content:space-around;padding:12px 0;border-top:1px dashed #e2e8f0;border-bottom:1px dashed #e2e8f0">
+            <div style="text-align:center">
+              <div style="font-size:20px;font-weight:700;color:#2563eb">+${p.bonus || 0}</div>
+              <div style="color:#94a3b8;font-size:12px">赠送金额(元)</div>
+            </div>
+            <div style="text-align:center">
+              <div style="font-size:20px;font-weight:700;color:#0ea5e9">+${p.gift_hours || 0}</div>
+              <div style="color:#94a3b8;font-size:12px">免费时长(h)</div>
+            </div>
+            <div style="text-align:center">
+              <div style="font-size:20px;font-weight:700;color:#16a34a">${p.price ? Math.round(((p.price + p.bonus) / p.price - 1) * 100) : 0}%</div>
+              <div style="color:#94a3b8;font-size:12px">综合优惠</div>
+            </div>
+          </div>
+          <div style="margin-top:12px">
+            <span class="status-tag ${p.is_active ? 'active' : 'inactive'}">${p.is_active ? '● 已上架' : '○ 已下架'}</span>
+          </div>
+          <div style="display:flex;gap:8px;margin-top:16px">
+            <button class="btn btn-sm btn-outline" onclick="showEditPackageModal(${p.id})">编辑</button>
+            <button class="btn btn-sm btn-outline" onclick="togglePackageStatus(${p.id}, ${!p.is_active})">${p.is_active ? '下架' : '上架'}</button>
+            <button class="btn btn-sm btn-danger" onclick="deletePackage(${p.id})">删除</button>
+          </div>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
+function showAddPackageModal() {
+  showModal(`
+    <div class="form-grid">
+      <div class="form-group">
+        <label>套餐名称 *</label>
+        <input type="text" class="input" id="pkgName" placeholder="例如: 黄金套餐">
+      </div>
+      <div class="form-group">
+        <label>售价(元) *</label>
+        <input type="number" class="input" id="pkgPrice" placeholder="0" min="0">
+      </div>
+      <div class="form-group">
+        <label>赠送金额(元)</label>
+        <input type="number" class="input" id="pkgBonus" placeholder="0" min="0" value="0">
+      </div>
+      <div class="form-group">
+        <label>赠送免费时长(h)</label>
+        <input type="number" class="input" id="pkgFreeHours" placeholder="0" min="0" value="0">
+      </div>
+      <div class="form-group">
+        <label>购买等级门槛</label>
+        <select class="input" id="pkgLevelRequired">
+          <option value="1">普通会员及以上</option>
+          <option value="2">银卡会员及以上</option>
+          <option value="3">金卡会员及以上</option>
+          <option value="4">钻石会员及以上</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>是否上架</label>
+        <select class="input" id="pkgActive">
+          <option value="true">上架销售</option>
+          <option value="false">暂不上架</option>
+        </select>
+      </div>
+      <div class="form-group" style="grid-column:1/-1">
+        <label>套餐描述</label>
+        <input type="text" class="input" id="pkgGiftDesc" placeholder="例如: 充500送100+2小时">
+      </div>
+    </div>
+    ${modalFooter([
+      { text: '取消', onclick: 'closeModal()' },
+      { text: '创建套餐', class: 'btn-primary', onclick: 'submitAddPackage()' }
+    ])}
+  `, '➕ 新增储值套餐');
+}
+
+async function submitAddPackage() {
+  const name = document.getElementById('pkgName').value.trim();
+  const price = parseFloat(document.getElementById('pkgPrice').value);
+  if (!name || !price) { showToast('套餐名称和售价必填', 'warning'); return; }
+
+  const result = await request(`${API}/member-packages`, {
+    method: 'POST',
+    body: {
+      name,
+      price,
+      bonus: parseFloat(document.getElementById('pkgBonus').value) || 0,
+      gift_hours: parseInt(document.getElementById('pkgFreeHours').value) || 0,
+      gift_desc: document.getElementById('pkgGiftDesc').value.trim(),
+      level_required: parseInt(document.getElementById('pkgLevelRequired').value),
+      is_active: document.getElementById('pkgActive').value === 'true'
+    }
+  });
+  if (result) {
+    showToast('套餐创建成功', 'success');
+    closeModal();
+    renderMemberPackages();
+  }
+}
+
+async function showEditPackageModal(id) {
+  const packages = await request(`${API}/member-packages`);
+  const p = packages?.find(x => x.id === id);
+  if (!p) return;
+  showModal(`
+    <div class="form-grid">
+      <div class="form-group">
+        <label>套餐名称 *</label>
+        <input type="text" class="input" id="epkgName" value="${p.name}">
+      </div>
+      <div class="form-group">
+        <label>售价(元) *</label>
+        <input type="number" class="input" id="epkgPrice" value="${p.price}">
+      </div>
+      <div class="form-group">
+        <label>赠送金额(元)</label>
+        <input type="number" class="input" id="epkgBonus" value="${p.bonus || 0}">
+      </div>
+      <div class="form-group">
+        <label>赠送免费时长(h)</label>
+        <input type="number" class="input" id="epkgFreeHours" value="${p.gift_hours || 0}">
+      </div>
+      <div class="form-group">
+        <label>购买等级门槛</label>
+        <select class="input" id="epkgLevelRequired">
+          <option value="1" ${p.level_required === 1 ? 'selected' : ''}>普通会员及以上</option>
+          <option value="2" ${p.level_required === 2 ? 'selected' : ''}>银卡会员及以上</option>
+          <option value="3" ${p.level_required === 3 ? 'selected' : ''}>金卡会员及以上</option>
+          <option value="4" ${p.level_required === 4 ? 'selected' : ''}>钻石会员及以上</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>是否上架</label>
+        <select class="input" id="epkgActive">
+          <option value="true" ${p.is_active ? 'selected' : ''}>上架销售</option>
+          <option value="false" ${!p.is_active ? 'selected' : ''}>暂不上架</option>
+        </select>
+      </div>
+      <div class="form-group" style="grid-column:1/-1">
+        <label>套餐描述</label>
+        <input type="text" class="input" id="epkgGiftDesc" value="${p.gift_desc || ''}">
+      </div>
+    </div>
+    ${modalFooter([
+      { text: '取消', onclick: 'closeModal()' },
+      { text: '保存', class: 'btn-primary', onclick: `submitEditPackage(${id})` }
+    ])}
+  `, '编辑套餐');
+}
+
+async function submitEditPackage(id) {
+  const name = document.getElementById('epkgName').value.trim();
+  const price = parseFloat(document.getElementById('epkgPrice').value);
+  if (!name || !price) { showToast('套餐名称和售价必填', 'warning'); return; }
+
+  const result = await request(`${API}/member-packages/${id}`, {
+    method: 'PUT',
+    body: {
+      name,
+      price,
+      bonus: parseFloat(document.getElementById('epkgBonus').value) || 0,
+      gift_hours: parseInt(document.getElementById('epkgFreeHours').value) || 0,
+      gift_desc: document.getElementById('epkgGiftDesc').value.trim(),
+      level_required: parseInt(document.getElementById('epkgLevelRequired').value),
+      is_active: document.getElementById('epkgActive').value === 'true'
+    }
+  });
+  if (result) {
+    showToast('套餐已更新', 'success');
+    closeModal();
+    renderMemberPackages();
+  }
+}
+
+async function togglePackageStatus(id, isActive) {
+  const result = await request(`${API}/member-packages/${id}`, {
+    method: 'PUT',
+    body: { is_active: isActive }
+  });
+  if (result) {
+    showToast(isActive ? '套餐已上架' : '套餐已下架', 'success');
+    renderMemberPackages();
+  }
+}
+
+async function deletePackage(id) {
+  if (!confirm('确定删除此套餐吗？已购买的会员不受影响。')) return;
+  const result = await request(`${API}/member-packages/${id}`, { method: 'DELETE' });
+  if (result) {
+    showToast('套餐已删除', 'success');
+    renderMemberPackages();
   }
 }
 

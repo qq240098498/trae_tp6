@@ -7,7 +7,7 @@
       "price_per_hour": 68,
       "status": "idle",
       "id": 1,
-      "created_at": "2026-06-10T02:35:22.218Z"
+      "created_at": "2026-06-10T06:49:32.673Z"
     },
     {
       "name": "A102",
@@ -16,7 +16,7 @@
       "price_per_hour": 68,
       "status": "idle",
       "id": 2,
-      "created_at": "2026-06-10T02:35:22.219Z"
+      "created_at": "2026-06-10T06:49:32.674Z"
     },
     {
       "name": "A103",
@@ -25,7 +25,7 @@
       "price_per_hour": 68,
       "status": "idle",
       "id": 3,
-      "created_at": "2026-06-10T02:35:22.220Z"
+      "created_at": "2026-06-10T06:49:32.675Z"
     },
     {
       "name": "B201",
@@ -34,7 +34,7 @@
       "price_per_hour": 128,
       "status": "idle",
       "id": 4,
-      "created_at": "2026-06-10T02:35:22.220Z"
+      "created_at": "2026-06-10T06:49:32.675Z"
     },
     {
       "name": "B202",
@@ -43,7 +43,7 @@
       "price_per_hour": 128,
       "status": "idle",
       "id": 5,
-      "created_at": "2026-06-10T02:35:22.221Z"
+      "created_at": "2026-06-10T06:49:32.676Z"
     },
     {
       "name": "B203",
@@ -52,7 +52,7 @@
       "price_per_hour": 158,
       "status": "idle",
       "id": 6,
-      "created_at": "2026-06-10T02:35:22.221Z"
+      "created_at": "2026-06-10T06:49:32.676Z"
     },
     {
       "name": "C301",
@@ -61,7 +61,7 @@
       "price_per_hour": 298,
       "status": "idle",
       "id": 7,
-      "created_at": "2026-06-10T02:35:22.222Z"
+      "created_at": "2026-06-10T06:49:32.677Z"
     },
     {
       "name": "C302",
@@ -70,7 +70,7 @@
       "price_per_hour": 298,
       "status": "idle",
       "id": 8,
-      "created_at": "2026-06-10T02:35:22.222Z"
+      "created_at": "2026-06-10T06:49:32.677Z"
     },
     {
       "name": "D401",
@@ -79,7 +79,7 @@
       "price_per_hour": 588,
       "status": "idle",
       "id": 9,
-      "created_at": "2026-06-10T02:35:22.223Z"
+      "created_at": "2026-06-10T06:49:32.678Z"
     }
   ],
   "movie_categories": [
@@ -87,49 +87,49 @@
       "name": "动作片",
       "description": "刺激精彩的动作电影",
       "id": 1,
-      "created_at": "2026-06-10T02:35:22.278Z"
+      "created_at": "2026-06-10T06:49:32.712Z"
     },
     {
       "name": "爱情片",
       "description": "浪漫温馨的爱情故事",
       "id": 2,
-      "created_at": "2026-06-10T02:35:22.279Z"
+      "created_at": "2026-06-10T06:49:32.712Z"
     },
     {
       "name": "科幻片",
       "description": "想象力丰富的科幻大作",
       "id": 3,
-      "created_at": "2026-06-10T02:35:22.280Z"
+      "created_at": "2026-06-10T06:49:32.713Z"
     },
     {
       "name": "喜剧片",
       "description": "轻松搞笑的喜剧电影",
       "id": 4,
-      "created_at": "2026-06-10T02:35:22.281Z"
+      "created_at": "2026-06-10T06:49:32.714Z"
     },
     {
       "name": "恐怖片",
       "description": "惊悚刺激的恐怖电影",
       "id": 5,
-      "created_at": "2026-06-10T02:35:22.282Z"
+      "created_at": "2026-06-10T06:49:32.714Z"
     },
     {
       "name": "动画片",
       "description": "老少皆宜的动画佳作",
       "id": 6,
-      "created_at": "2026-06-10T02:35:22.282Z"
+      "created_at": "2026-06-10T06:49:32.715Z"
     },
     {
       "name": "纪录片",
       "description": "真实记录的纪录片",
       "id": 7,
-      "created_at": "2026-06-10T02:35:22.283Z"
+      "created_at": "2026-06-10T06:49:32.715Z"
     },
     {
       "name": "经典老片",
       "description": "永不过时的经典作品",
       "id": 8,
-      "created_at": "2026-06-10T02:35:22.284Z"
+      "created_at": "2026-06-10T06:49:32.716Z"
     }
   ],
   "movies": [
@@ -142,7 +142,7 @@
       "description": "多米尼克·托莱多带领他的家人面对迄今为止最致命的对手。",
       "release_year": 2023,
       "poster_url": null,
-      "created_at": "2026-06-10T02:35:22.285Z"
+      "created_at": "2026-06-10T06:49:32.717Z"
     },
     {
       "id": 2,
@@ -153,7 +153,7 @@
       "description": "伊森·亨特和他的IMF团队开始寻找一种会威胁全人类生存的可怕武器。",
       "release_year": 2023,
       "poster_url": null,
-      "created_at": "2026-06-10T02:35:22.286Z"
+      "created_at": "2026-06-10T06:49:32.717Z"
     },
     {
       "id": 3,
@@ -164,7 +164,7 @@
       "description": "抗美援朝战争中长津湖战役的壮烈故事。",
       "release_year": 2021,
       "poster_url": null,
-      "created_at": "2026-06-10T02:35:22.286Z"
+      "created_at": "2026-06-10T06:49:32.718Z"
     },
     {
       "id": 4,
@@ -175,7 +175,7 @@
       "description": "一段发生在泰坦尼克号上的跨阶级爱情故事。",
       "release_year": 1997,
       "poster_url": null,
-      "created_at": "2026-06-10T02:35:22.287Z"
+      "created_at": "2026-06-10T06:49:32.719Z"
     },
     {
       "id": 5,
@@ -186,7 +186,7 @@
       "description": "一对陌生男女在维也纳度过浪漫的一天。",
       "release_year": 1995,
       "poster_url": null,
-      "created_at": "2026-06-10T02:35:22.288Z"
+      "created_at": "2026-06-10T06:49:32.719Z"
     },
     {
       "id": 6,
@@ -197,7 +197,7 @@
       "description": "一段跨越青春的校园爱情故事。",
       "release_year": 2021,
       "poster_url": null,
-      "created_at": "2026-06-10T02:35:22.288Z"
+      "created_at": "2026-06-10T06:49:32.720Z"
     },
     {
       "id": 7,
@@ -208,7 +208,7 @@
       "description": "一组探险家穿越虫洞寻找人类新家园的史诗冒险。",
       "release_year": 2014,
       "poster_url": null,
-      "created_at": "2026-06-10T02:35:22.288Z"
+      "created_at": "2026-06-10T06:49:32.721Z"
     },
     {
       "id": 8,
@@ -219,7 +219,7 @@
       "description": "太阳即将毁灭，人类开启移山计划拯救地球。",
       "release_year": 2023,
       "poster_url": null,
-      "created_at": "2026-06-10T02:35:22.289Z"
+      "created_at": "2026-06-10T06:49:32.722Z"
     },
     {
       "id": 9,
@@ -230,7 +230,7 @@
       "description": "进入他人梦境窃取机密的科幻冒险。",
       "release_year": 2010,
       "poster_url": null,
-      "created_at": "2026-06-10T02:35:22.290Z"
+      "created_at": "2026-06-10T06:49:32.724Z"
     },
     {
       "id": 10,
@@ -241,7 +241,7 @@
       "description": "穿越回学生时代的爆笑喜剧。",
       "release_year": 2015,
       "poster_url": null,
-      "created_at": "2026-06-10T02:35:22.290Z"
+      "created_at": "2026-06-10T06:49:32.725Z"
     },
     {
       "id": 11,
@@ -252,7 +252,7 @@
       "description": "一个月花光十亿的爆笑挑战。",
       "release_year": 2018,
       "poster_url": null,
-      "created_at": "2026-06-10T02:35:22.291Z"
+      "created_at": "2026-06-10T06:49:32.726Z"
     },
     {
       "id": 12,
@@ -263,7 +263,7 @@
       "description": "穿越回妈妈年轻时代的温喜剧。",
       "release_year": 2021,
       "poster_url": null,
-      "created_at": "2026-06-10T02:35:22.292Z"
+      "created_at": "2026-06-10T06:49:32.726Z"
     },
     {
       "id": 13,
@@ -274,7 +274,7 @@
       "description": "看过神秘录像带的人七天后死亡的恐怖传说。",
       "release_year": 1998,
       "poster_url": null,
-      "created_at": "2026-06-10T02:35:22.293Z"
+      "created_at": "2026-06-10T06:49:32.727Z"
     },
     {
       "id": 14,
@@ -285,7 +285,7 @@
       "description": "真实事件改编的超自然恐怖故事。",
       "release_year": 2013,
       "poster_url": null,
-      "created_at": "2026-06-10T02:35:22.293Z"
+      "created_at": "2026-06-10T06:49:32.727Z"
     },
     {
       "id": 15,
@@ -296,7 +296,7 @@
       "description": "丧尸病毒爆发下列车上的生死逃亡。",
       "release_year": 2016,
       "poster_url": null,
-      "created_at": "2026-06-10T02:35:22.294Z"
+      "created_at": "2026-06-10T06:49:32.728Z"
     },
     {
       "id": 16,
@@ -307,7 +307,7 @@
       "description": "少女千寻在神秘神灵世界的冒险。",
       "release_year": 2001,
       "poster_url": null,
-      "created_at": "2026-06-10T02:35:22.294Z"
+      "created_at": "2026-06-10T06:49:32.729Z"
     },
     {
       "id": 17,
@@ -318,7 +318,7 @@
       "description": "兔子警官与狐狸搭档破案的故事。",
       "release_year": 2016,
       "poster_url": null,
-      "created_at": "2026-06-10T02:35:22.295Z"
+      "created_at": "2026-06-10T06:49:32.729Z"
     },
     {
       "id": 18,
@@ -329,7 +329,7 @@
       "description": "我命由我不由天的哪吒传奇。",
       "release_year": 2019,
       "poster_url": null,
-      "created_at": "2026-06-10T02:35:22.296Z"
+      "created_at": "2026-06-10T06:49:32.730Z"
     },
     {
       "id": 19,
@@ -340,7 +340,7 @@
       "description": "BBC经典自然纪录片系列。",
       "release_year": 2006,
       "poster_url": null,
-      "created_at": "2026-06-10T02:35:22.297Z"
+      "created_at": "2026-06-10T06:49:32.731Z"
     },
     {
       "id": 20,
@@ -351,7 +351,7 @@
       "description": "记录医院里的人生百态。",
       "release_year": 2016,
       "poster_url": null,
-      "created_at": "2026-06-10T02:35:22.298Z"
+      "created_at": "2026-06-10T06:49:32.732Z"
     },
     {
       "id": 21,
@@ -362,7 +362,7 @@
       "description": "两个京剧伶人半个世纪的悲欢离合。",
       "release_year": 1993,
       "poster_url": null,
-      "created_at": "2026-06-10T02:35:22.299Z"
+      "created_at": "2026-06-10T06:49:32.732Z"
     },
     {
       "id": 22,
@@ -373,7 +373,7 @@
       "description": "银行家在肖申克监狱的希望与自由。",
       "release_year": 1994,
       "poster_url": null,
-      "created_at": "2026-06-10T02:35:22.299Z"
+      "created_at": "2026-06-10T06:49:32.733Z"
     },
     {
       "id": 23,
@@ -384,133 +384,11 @@
       "description": "一个智商不高的男人的传奇人生。",
       "release_year": 1994,
       "poster_url": null,
-      "created_at": "2026-06-10T02:35:22.300Z"
+      "created_at": "2026-06-10T06:49:32.733Z"
     }
   ],
-  "reservations": [
-    {
-      "id": 1,
-      "room_id": 1,
-      "movie_id": null,
-      "customer_name": "?",
-      "customer_phone": "13800000001",
-      "start_time": "2026-06-15T06:00:00.000Z",
-      "end_time": "2026-06-15T08:00:00.000Z",
-      "status": "cancelled",
-      "total_amount": 136,
-      "paid_amount": 0,
-      "checkin_code": "63AC2E",
-      "checkin_time": null,
-      "checkout_time": null,
-      "remark": "",
-      "created_at": "2026-06-10T02:36:04.295Z",
-      "cancel_reason": "【系统自动取消】包间A101存在2项未解决设备故障：[高级]A101-投影机故障; [中级]A101-灯光系统故障。为保障观影体验，系统已自动取消本次预约，请及时联系客户改期或退款。",
-      "cancelled_at": "2026-06-10T02:36:04.359Z",
-      "cancelled_by": "system"
-    },
-    {
-      "id": 2,
-      "room_id": 1,
-      "movie_id": null,
-      "customer_name": "?",
-      "customer_phone": "13800000002",
-      "start_time": "2026-06-20T11:00:00.000Z",
-      "end_time": "2026-06-20T14:00:00.000Z",
-      "status": "cancelled",
-      "total_amount": 204,
-      "paid_amount": 0,
-      "checkin_code": "4CCCC5",
-      "checkin_time": null,
-      "checkout_time": null,
-      "remark": "",
-      "created_at": "2026-06-10T02:36:04.341Z",
-      "cancel_reason": "【系统自动取消】包间A101存在2项未解决设备故障：[高级]A101-投影机故障; [中级]A101-灯光系统故障。为保障观影体验，系统已自动取消本次预约，请及时联系客户改期或退款。",
-      "cancelled_at": "2026-06-10T02:36:04.359Z",
-      "cancelled_by": "system"
-    },
-    {
-      "id": 3,
-      "room_id": 1,
-      "movie_id": null,
-      "customer_name": "?",
-      "customer_phone": "13800000003",
-      "start_time": "2026-07-01T02:00:00.000Z",
-      "end_time": "2026-07-01T04:00:00.000Z",
-      "status": "cancelled",
-      "total_amount": 136,
-      "paid_amount": 0,
-      "checkin_code": "0B84EC",
-      "checkin_time": null,
-      "checkout_time": null,
-      "remark": "",
-      "created_at": "2026-06-10T02:36:04.346Z",
-      "cancel_reason": "【系统自动取消】包间A101存在2项未解决设备故障：[高级]A101-投影机故障; [中级]A101-灯光系统故障。为保障观影体验，系统已自动取消本次预约，请及时联系客户改期或退款。",
-      "cancelled_at": "2026-06-10T02:36:04.359Z",
-      "cancelled_by": "system"
-    },
-    {
-      "id": 4,
-      "room_id": 1,
-      "movie_id": null,
-      "customer_name": "????",
-      "customer_phone": "13800000999",
-      "start_time": "2026-06-12T06:00:00.000Z",
-      "end_time": "2026-06-12T08:00:00.000Z",
-      "status": "booked",
-      "total_amount": 136,
-      "paid_amount": 0,
-      "checkin_code": "681B62",
-      "checkin_time": null,
-      "checkout_time": null,
-      "remark": "",
-      "created_at": "2026-06-10T02:36:04.434Z"
-    },
-    {
-      "id": 5,
-      "room_id": 1,
-      "movie_id": null,
-      "customer_name": "????A",
-      "customer_phone": "13800138000",
-      "start_time": "2026-06-10T03:53:30.000Z",
-      "end_time": "2026-06-10T05:53:30.000Z",
-      "status": "booked",
-      "total_amount": 136,
-      "paid_amount": 0,
-      "checkin_code": "097C84",
-      "checkin_time": null,
-      "checkout_time": null,
-      "remark": "",
-      "created_at": "2026-06-10T02:53:30.785Z"
-    },
-    {
-      "id": 6,
-      "room_id": 2,
-      "movie_id": null,
-      "customer_name": "????",
-      "customer_phone": "13700137000",
-      "start_time": "2026-06-10T02:43:47.000Z",
-      "end_time": "2026-06-10T04:53:47.000Z",
-      "status": "completed",
-      "total_amount": 204,
-      "paid_amount": 204,
-      "checkin_code": "490093",
-      "checkin_time": "2026-06-10T02:53:47.351Z",
-      "checkout_time": "2026-06-10T02:54:03.424Z",
-      "remark": "",
-      "created_at": "2026-06-10T02:53:47.339Z"
-    }
-  ],
-  "transactions": [
-    {
-      "id": 1,
-      "reservation_id": 6,
-      "type": "payment",
-      "amount": 204,
-      "payment_method": "cash",
-      "remark": "",
-      "created_at": "2026-06-10T02:54:03.424Z"
-    }
-  ],
+  "reservations": [],
+  "transactions": [],
   "devices": [
     {
       "id": 1,
@@ -521,11 +399,11 @@
       "icon": "📽️",
       "brand": "爱普生",
       "model": "CB-X41",
-      "purchase_date": "2025-07-08",
+      "purchase_date": "2026-02-24",
       "status": "normal",
-      "last_inspection": "2026-06-10T02:36:04.357Z",
+      "last_inspection": null,
       "remark": "",
-      "created_at": "2026-06-10T02:35:22.224Z"
+      "created_at": "2026-06-10T06:49:32.678Z"
     },
     {
       "id": 2,
@@ -536,11 +414,11 @@
       "icon": "🔊",
       "brand": "BOSE",
       "model": "Acoustimass 6",
-      "purchase_date": "2025-10-14",
+      "purchase_date": "2026-01-29",
       "status": "normal",
-      "last_inspection": "2026-06-10T02:36:04.357Z",
+      "last_inspection": null,
       "remark": "",
-      "created_at": "2026-06-10T02:35:22.224Z"
+      "created_at": "2026-06-10T06:49:32.679Z"
     },
     {
       "id": 3,
@@ -551,11 +429,11 @@
       "icon": "❄️",
       "brand": "格力",
       "model": "KFR-72LW",
-      "purchase_date": "2025-09-07",
+      "purchase_date": "2026-04-30",
       "status": "normal",
-      "last_inspection": "2026-06-10T02:36:04.357Z",
+      "last_inspection": null,
       "remark": "",
-      "created_at": "2026-06-10T02:35:22.225Z"
+      "created_at": "2026-06-10T06:49:32.679Z"
     },
     {
       "id": 4,
@@ -566,11 +444,11 @@
       "icon": "💡",
       "brand": "飞利浦",
       "model": "BR126",
-      "purchase_date": "2025-10-09",
+      "purchase_date": "2025-07-09",
       "status": "normal",
-      "last_inspection": "2026-06-10T02:36:04.357Z",
+      "last_inspection": null,
       "remark": "",
-      "created_at": "2026-06-10T02:35:22.225Z"
+      "created_at": "2026-06-10T06:49:32.680Z"
     },
     {
       "id": 5,
@@ -581,11 +459,11 @@
       "icon": "🎞️",
       "brand": "-",
       "model": "-",
-      "purchase_date": "2025-12-23",
+      "purchase_date": "2026-05-16",
       "status": "normal",
-      "last_inspection": "2026-06-10T02:36:04.357Z",
+      "last_inspection": null,
       "remark": "",
-      "created_at": "2026-06-10T02:35:22.226Z"
+      "created_at": "2026-06-10T06:49:32.680Z"
     },
     {
       "id": 6,
@@ -596,11 +474,11 @@
       "icon": "🛋️",
       "brand": "-",
       "model": "-",
-      "purchase_date": "2025-10-18",
+      "purchase_date": "2025-09-19",
       "status": "normal",
-      "last_inspection": "2026-06-10T02:36:04.357Z",
+      "last_inspection": null,
       "remark": "",
-      "created_at": "2026-06-10T02:35:22.226Z"
+      "created_at": "2026-06-10T06:49:32.680Z"
     },
     {
       "id": 7,
@@ -611,11 +489,11 @@
       "icon": "📽️",
       "brand": "爱普生",
       "model": "CB-X41",
-      "purchase_date": "2025-11-05",
+      "purchase_date": "2025-09-16",
       "status": "normal",
       "last_inspection": null,
       "remark": "",
-      "created_at": "2026-06-10T02:35:22.227Z"
+      "created_at": "2026-06-10T06:49:32.681Z"
     },
     {
       "id": 8,
@@ -626,11 +504,11 @@
       "icon": "🔊",
       "brand": "BOSE",
       "model": "Acoustimass 6",
-      "purchase_date": "2025-09-01",
+      "purchase_date": "2025-10-01",
       "status": "normal",
       "last_inspection": null,
       "remark": "",
-      "created_at": "2026-06-10T02:35:22.227Z"
+      "created_at": "2026-06-10T06:49:32.681Z"
     },
     {
       "id": 9,
@@ -641,11 +519,11 @@
       "icon": "❄️",
       "brand": "格力",
       "model": "KFR-72LW",
-      "purchase_date": "2025-11-28",
+      "purchase_date": "2025-07-01",
       "status": "normal",
       "last_inspection": null,
       "remark": "",
-      "created_at": "2026-06-10T02:35:22.229Z"
+      "created_at": "2026-06-10T06:49:32.681Z"
     },
     {
       "id": 10,
@@ -656,11 +534,11 @@
       "icon": "💡",
       "brand": "飞利浦",
       "model": "BR126",
-      "purchase_date": "2026-04-02",
+      "purchase_date": "2025-11-22",
       "status": "normal",
       "last_inspection": null,
       "remark": "",
-      "created_at": "2026-06-10T02:35:22.229Z"
+      "created_at": "2026-06-10T06:49:32.682Z"
     },
     {
       "id": 11,
@@ -671,11 +549,11 @@
       "icon": "🎞️",
       "brand": "-",
       "model": "-",
-      "purchase_date": "2026-03-19",
+      "purchase_date": "2025-11-11",
       "status": "normal",
       "last_inspection": null,
       "remark": "",
-      "created_at": "2026-06-10T02:35:22.230Z"
+      "created_at": "2026-06-10T06:49:32.682Z"
     },
     {
       "id": 12,
@@ -686,11 +564,11 @@
       "icon": "🛋️",
       "brand": "-",
       "model": "-",
-      "purchase_date": "2026-02-21",
+      "purchase_date": "2025-11-16",
       "status": "normal",
       "last_inspection": null,
       "remark": "",
-      "created_at": "2026-06-10T02:35:22.231Z"
+      "created_at": "2026-06-10T06:49:32.683Z"
     },
     {
       "id": 13,
@@ -701,11 +579,11 @@
       "icon": "📽️",
       "brand": "爱普生",
       "model": "CB-X41",
-      "purchase_date": "2025-10-01",
+      "purchase_date": "2026-02-05",
       "status": "normal",
       "last_inspection": null,
       "remark": "",
-      "created_at": "2026-06-10T02:35:22.232Z"
+      "created_at": "2026-06-10T06:49:32.683Z"
     },
     {
       "id": 14,
@@ -716,11 +594,11 @@
       "icon": "🔊",
       "brand": "BOSE",
       "model": "Acoustimass 6",
-      "purchase_date": "2026-05-22",
+      "purchase_date": "2025-11-10",
       "status": "normal",
       "last_inspection": null,
       "remark": "",
-      "created_at": "2026-06-10T02:35:22.232Z"
+      "created_at": "2026-06-10T06:49:32.683Z"
     },
     {
       "id": 15,
@@ -731,11 +609,11 @@
       "icon": "❄️",
       "brand": "格力",
       "model": "KFR-72LW",
-      "purchase_date": "2025-06-25",
+      "purchase_date": "2026-01-06",
       "status": "normal",
       "last_inspection": null,
       "remark": "",
-      "created_at": "2026-06-10T02:35:22.233Z"
+      "created_at": "2026-06-10T06:49:32.684Z"
     },
     {
       "id": 16,
@@ -746,11 +624,11 @@
       "icon": "💡",
       "brand": "飞利浦",
       "model": "BR126",
-      "purchase_date": "2025-10-01",
+      "purchase_date": "2026-05-08",
       "status": "normal",
       "last_inspection": null,
       "remark": "",
-      "created_at": "2026-06-10T02:35:22.234Z"
+      "created_at": "2026-06-10T06:49:32.684Z"
     },
     {
       "id": 17,
@@ -761,11 +639,11 @@
       "icon": "🎞️",
       "brand": "-",
       "model": "-",
-      "purchase_date": "2025-09-02",
+      "purchase_date": "2025-08-20",
       "status": "normal",
       "last_inspection": null,
       "remark": "",
-      "created_at": "2026-06-10T02:35:22.235Z"
+      "created_at": "2026-06-10T06:49:32.685Z"
     },
     {
       "id": 18,
@@ -776,11 +654,11 @@
       "icon": "🛋️",
       "brand": "-",
       "model": "-",
-      "purchase_date": "2026-03-17",
+      "purchase_date": "2026-04-28",
       "status": "normal",
       "last_inspection": null,
       "remark": "",
-      "created_at": "2026-06-10T02:35:22.236Z"
+      "created_at": "2026-06-10T06:49:32.685Z"
     },
     {
       "id": 19,
@@ -791,11 +669,11 @@
       "icon": "📽️",
       "brand": "爱普生",
       "model": "CB-X41",
-      "purchase_date": "2026-04-03",
+      "purchase_date": "2026-06-08",
       "status": "normal",
       "last_inspection": null,
       "remark": "",
-      "created_at": "2026-06-10T02:35:22.237Z"
+      "created_at": "2026-06-10T06:49:32.686Z"
     },
     {
       "id": 20,
@@ -806,11 +684,11 @@
       "icon": "🔊",
       "brand": "BOSE",
       "model": "Acoustimass 6",
-      "purchase_date": "2026-05-18",
+      "purchase_date": "2025-08-25",
       "status": "normal",
       "last_inspection": null,
       "remark": "",
-      "created_at": "2026-06-10T02:35:22.237Z"
+      "created_at": "2026-06-10T06:49:32.686Z"
     },
     {
       "id": 21,
@@ -821,11 +699,11 @@
       "icon": "❄️",
       "brand": "格力",
       "model": "KFR-72LW",
-      "purchase_date": "2025-12-01",
+      "purchase_date": "2025-06-18",
       "status": "normal",
       "last_inspection": null,
       "remark": "",
-      "created_at": "2026-06-10T02:35:22.238Z"
+      "created_at": "2026-06-10T06:49:32.687Z"
     },
     {
       "id": 22,
@@ -836,11 +714,11 @@
       "icon": "💡",
       "brand": "飞利浦",
       "model": "BR126",
-      "purchase_date": "2025-10-07",
+      "purchase_date": "2025-08-22",
       "status": "normal",
       "last_inspection": null,
       "remark": "",
-      "created_at": "2026-06-10T02:35:22.238Z"
+      "created_at": "2026-06-10T06:49:32.687Z"
     },
     {
       "id": 23,
@@ -851,11 +729,11 @@
       "icon": "🎞️",
       "brand": "-",
       "model": "-",
-      "purchase_date": "2025-06-14",
+      "purchase_date": "2026-04-08",
       "status": "normal",
       "last_inspection": null,
       "remark": "",
-      "created_at": "2026-06-10T02:35:22.239Z"
+      "created_at": "2026-06-10T06:49:32.688Z"
     },
     {
       "id": 24,
@@ -866,11 +744,11 @@
       "icon": "🛋️",
       "brand": "-",
       "model": "-",
-      "purchase_date": "2025-10-19",
+      "purchase_date": "2025-12-31",
       "status": "normal",
       "last_inspection": null,
       "remark": "",
-      "created_at": "2026-06-10T02:35:22.240Z"
+      "created_at": "2026-06-10T06:49:32.689Z"
     },
     {
       "id": 25,
@@ -881,11 +759,11 @@
       "icon": "📽️",
       "brand": "爱普生",
       "model": "CB-X41",
-      "purchase_date": "2026-01-04",
+      "purchase_date": "2025-10-28",
       "status": "normal",
       "last_inspection": null,
       "remark": "",
-      "created_at": "2026-06-10T02:35:22.241Z"
+      "created_at": "2026-06-10T06:49:32.690Z"
     },
     {
       "id": 26,
@@ -896,11 +774,11 @@
       "icon": "🔊",
       "brand": "BOSE",
       "model": "Acoustimass 6",
-      "purchase_date": "2025-09-24",
+      "purchase_date": "2025-07-22",
       "status": "normal",
       "last_inspection": null,
       "remark": "",
-      "created_at": "2026-06-10T02:35:22.242Z"
+      "created_at": "2026-06-10T06:49:32.690Z"
     },
     {
       "id": 27,
@@ -911,11 +789,11 @@
       "icon": "❄️",
       "brand": "格力",
       "model": "KFR-72LW",
-      "purchase_date": "2025-09-01",
+      "purchase_date": "2025-07-28",
       "status": "normal",
       "last_inspection": null,
       "remark": "",
-      "created_at": "2026-06-10T02:35:22.243Z"
+      "created_at": "2026-06-10T06:49:32.691Z"
     },
     {
       "id": 28,
@@ -926,11 +804,11 @@
       "icon": "💡",
       "brand": "飞利浦",
       "model": "BR126",
-      "purchase_date": "2025-11-23",
+      "purchase_date": "2026-02-05",
       "status": "normal",
       "last_inspection": null,
       "remark": "",
-      "created_at": "2026-06-10T02:35:22.243Z"
+      "created_at": "2026-06-10T06:49:32.692Z"
     },
     {
       "id": 29,
@@ -941,11 +819,11 @@
       "icon": "🎞️",
       "brand": "-",
       "model": "-",
-      "purchase_date": "2026-01-12",
+      "purchase_date": "2026-05-06",
       "status": "normal",
       "last_inspection": null,
       "remark": "",
-      "created_at": "2026-06-10T02:35:22.244Z"
+      "created_at": "2026-06-10T06:49:32.693Z"
     },
     {
       "id": 30,
@@ -956,11 +834,11 @@
       "icon": "🛋️",
       "brand": "-",
       "model": "-",
-      "purchase_date": "2025-10-23",
+      "purchase_date": "2025-08-12",
       "status": "normal",
       "last_inspection": null,
       "remark": "",
-      "created_at": "2026-06-10T02:35:22.245Z"
+      "created_at": "2026-06-10T06:49:32.694Z"
     },
     {
       "id": 31,
@@ -971,11 +849,11 @@
       "icon": "📽️",
       "brand": "爱普生",
       "model": "CB-X41",
-      "purchase_date": "2026-06-04",
+      "purchase_date": "2025-12-24",
       "status": "normal",
       "last_inspection": null,
       "remark": "",
-      "created_at": "2026-06-10T02:35:22.246Z"
+      "created_at": "2026-06-10T06:49:32.694Z"
     },
     {
       "id": 32,
@@ -986,11 +864,11 @@
       "icon": "🔊",
       "brand": "BOSE",
       "model": "Acoustimass 6",
-      "purchase_date": "2025-11-25",
+      "purchase_date": "2025-10-15",
       "status": "normal",
       "last_inspection": null,
       "remark": "",
-      "created_at": "2026-06-10T02:35:22.247Z"
+      "created_at": "2026-06-10T06:49:32.694Z"
     },
     {
       "id": 33,
@@ -1001,11 +879,11 @@
       "icon": "❄️",
       "brand": "格力",
       "model": "KFR-72LW",
-      "purchase_date": "2026-01-05",
+      "purchase_date": "2026-03-06",
       "status": "normal",
       "last_inspection": null,
       "remark": "",
-      "created_at": "2026-06-10T02:35:22.249Z"
+      "created_at": "2026-06-10T06:49:32.695Z"
     },
     {
       "id": 34,
@@ -1016,11 +894,11 @@
       "icon": "💡",
       "brand": "飞利浦",
       "model": "BR126",
-      "purchase_date": "2025-10-15",
+      "purchase_date": "2025-12-12",
       "status": "normal",
       "last_inspection": null,
       "remark": "",
-      "created_at": "2026-06-10T02:35:22.251Z"
+      "created_at": "2026-06-10T06:49:32.695Z"
     },
     {
       "id": 35,
@@ -1031,11 +909,11 @@
       "icon": "🎞️",
       "brand": "-",
       "model": "-",
-      "purchase_date": "2026-05-11",
+      "purchase_date": "2026-03-15",
       "status": "normal",
       "last_inspection": null,
       "remark": "",
-      "created_at": "2026-06-10T02:35:22.251Z"
+      "created_at": "2026-06-10T06:49:32.696Z"
     },
     {
       "id": 36,
@@ -1046,11 +924,11 @@
       "icon": "🛋️",
       "brand": "-",
       "model": "-",
-      "purchase_date": "2026-03-31",
+      "purchase_date": "2025-10-17",
       "status": "normal",
       "last_inspection": null,
       "remark": "",
-      "created_at": "2026-06-10T02:35:22.252Z"
+      "created_at": "2026-06-10T06:49:32.696Z"
     },
     {
       "id": 37,
@@ -1061,11 +939,11 @@
       "icon": "📽️",
       "brand": "爱普生",
       "model": "CB-X41",
-      "purchase_date": "2026-04-22",
+      "purchase_date": "2026-05-17",
       "status": "normal",
       "last_inspection": null,
       "remark": "",
-      "created_at": "2026-06-10T02:35:22.253Z"
+      "created_at": "2026-06-10T06:49:32.697Z"
     },
     {
       "id": 38,
@@ -1076,11 +954,11 @@
       "icon": "🔊",
       "brand": "BOSE",
       "model": "Acoustimass 6",
-      "purchase_date": "2025-10-26",
+      "purchase_date": "2026-03-13",
       "status": "normal",
       "last_inspection": null,
       "remark": "",
-      "created_at": "2026-06-10T02:35:22.254Z"
+      "created_at": "2026-06-10T06:49:32.698Z"
     },
     {
       "id": 39,
@@ -1091,11 +969,11 @@
       "icon": "❄️",
       "brand": "格力",
       "model": "KFR-72LW",
-      "purchase_date": "2025-09-18",
+      "purchase_date": "2026-05-16",
       "status": "normal",
       "last_inspection": null,
       "remark": "",
-      "created_at": "2026-06-10T02:35:22.255Z"
+      "created_at": "2026-06-10T06:49:32.699Z"
     },
     {
       "id": 40,
@@ -1106,11 +984,11 @@
       "icon": "💡",
       "brand": "飞利浦",
       "model": "BR126",
-      "purchase_date": "2026-04-28",
+      "purchase_date": "2026-04-27",
       "status": "normal",
       "last_inspection": null,
       "remark": "",
-      "created_at": "2026-06-10T02:35:22.256Z"
+      "created_at": "2026-06-10T06:49:32.699Z"
     },
     {
       "id": 41,
@@ -1121,11 +999,11 @@
       "icon": "🎞️",
       "brand": "-",
       "model": "-",
-      "purchase_date": "2025-10-20",
+      "purchase_date": "2025-09-30",
       "status": "normal",
       "last_inspection": null,
       "remark": "",
-      "created_at": "2026-06-10T02:35:22.257Z"
+      "created_at": "2026-06-10T06:49:32.700Z"
     },
     {
       "id": 42,
@@ -1136,11 +1014,11 @@
       "icon": "🛋️",
       "brand": "-",
       "model": "-",
-      "purchase_date": "2025-12-04",
+      "purchase_date": "2025-11-17",
       "status": "normal",
       "last_inspection": null,
       "remark": "",
-      "created_at": "2026-06-10T02:35:22.258Z"
+      "created_at": "2026-06-10T06:49:32.701Z"
     },
     {
       "id": 43,
@@ -1151,11 +1029,11 @@
       "icon": "📽️",
       "brand": "爱普生",
       "model": "CB-X41",
-      "purchase_date": "2025-10-08",
+      "purchase_date": "2025-09-03",
       "status": "normal",
       "last_inspection": null,
       "remark": "",
-      "created_at": "2026-06-10T02:35:22.259Z"
+      "created_at": "2026-06-10T06:49:32.701Z"
     },
     {
       "id": 44,
@@ -1166,11 +1044,11 @@
       "icon": "🔊",
       "brand": "BOSE",
       "model": "Acoustimass 6",
-      "purchase_date": "2025-10-31",
+      "purchase_date": "2025-06-22",
       "status": "normal",
       "last_inspection": null,
       "remark": "",
-      "created_at": "2026-06-10T02:35:22.260Z"
+      "created_at": "2026-06-10T06:49:32.702Z"
     },
     {
       "id": 45,
@@ -1181,11 +1059,11 @@
       "icon": "❄️",
       "brand": "格力",
       "model": "KFR-72LW",
-      "purchase_date": "2025-12-15",
+      "purchase_date": "2026-01-07",
       "status": "normal",
       "last_inspection": null,
       "remark": "",
-      "created_at": "2026-06-10T02:35:22.260Z"
+      "created_at": "2026-06-10T06:49:32.702Z"
     },
     {
       "id": 46,
@@ -1196,11 +1074,11 @@
       "icon": "💡",
       "brand": "飞利浦",
       "model": "BR126",
-      "purchase_date": "2025-09-28",
+      "purchase_date": "2025-10-31",
       "status": "normal",
       "last_inspection": null,
       "remark": "",
-      "created_at": "2026-06-10T02:35:22.262Z"
+      "created_at": "2026-06-10T06:49:32.703Z"
     },
     {
       "id": 47,
@@ -1211,11 +1089,11 @@
       "icon": "🎞️",
       "brand": "-",
       "model": "-",
-      "purchase_date": "2025-11-04",
+      "purchase_date": "2025-12-25",
       "status": "normal",
       "last_inspection": null,
       "remark": "",
-      "created_at": "2026-06-10T02:35:22.264Z"
+      "created_at": "2026-06-10T06:49:32.704Z"
     },
     {
       "id": 48,
@@ -1226,11 +1104,11 @@
       "icon": "🛋️",
       "brand": "-",
       "model": "-",
-      "purchase_date": "2026-02-19",
+      "purchase_date": "2025-11-17",
       "status": "normal",
       "last_inspection": null,
       "remark": "",
-      "created_at": "2026-06-10T02:35:22.266Z"
+      "created_at": "2026-06-10T06:49:32.704Z"
     },
     {
       "id": 49,
@@ -1241,11 +1119,11 @@
       "icon": "📽️",
       "brand": "爱普生",
       "model": "CB-X41",
-      "purchase_date": "2026-01-01",
+      "purchase_date": "2026-02-24",
       "status": "normal",
       "last_inspection": null,
       "remark": "",
-      "created_at": "2026-06-10T02:35:22.267Z"
+      "created_at": "2026-06-10T06:49:32.706Z"
     },
     {
       "id": 50,
@@ -1256,11 +1134,11 @@
       "icon": "🔊",
       "brand": "BOSE",
       "model": "Acoustimass 6",
-      "purchase_date": "2026-05-08",
+      "purchase_date": "2026-01-26",
       "status": "normal",
       "last_inspection": null,
       "remark": "",
-      "created_at": "2026-06-10T02:35:22.269Z"
+      "created_at": "2026-06-10T06:49:32.707Z"
     },
     {
       "id": 51,
@@ -1271,11 +1149,11 @@
       "icon": "❄️",
       "brand": "格力",
       "model": "KFR-72LW",
-      "purchase_date": "2026-01-29",
+      "purchase_date": "2026-04-15",
       "status": "normal",
       "last_inspection": null,
       "remark": "",
-      "created_at": "2026-06-10T02:35:22.270Z"
+      "created_at": "2026-06-10T06:49:32.707Z"
     },
     {
       "id": 52,
@@ -1286,11 +1164,11 @@
       "icon": "💡",
       "brand": "飞利浦",
       "model": "BR126",
-      "purchase_date": "2025-09-25",
+      "purchase_date": "2025-09-05",
       "status": "normal",
       "last_inspection": null,
       "remark": "",
-      "created_at": "2026-06-10T02:35:22.271Z"
+      "created_at": "2026-06-10T06:49:32.708Z"
     },
     {
       "id": 53,
@@ -1301,11 +1179,11 @@
       "icon": "🎞️",
       "brand": "-",
       "model": "-",
-      "purchase_date": "2026-04-09",
+      "purchase_date": "2025-11-30",
       "status": "normal",
       "last_inspection": null,
       "remark": "",
-      "created_at": "2026-06-10T02:35:22.272Z"
+      "created_at": "2026-06-10T06:49:32.709Z"
     },
     {
       "id": 54,
@@ -1316,113 +1194,308 @@
       "icon": "🛋️",
       "brand": "-",
       "model": "-",
-      "purchase_date": "2026-01-17",
+      "purchase_date": "2026-06-09",
       "status": "normal",
       "last_inspection": null,
       "remark": "",
-      "created_at": "2026-06-10T02:35:22.272Z"
+      "created_at": "2026-06-10T06:49:32.709Z"
     }
   ],
-  "inspections": [
+  "inspections": [],
+  "faults": [],
+  "repairs": [],
+  "member_levels": [
     {
-      "id": 1,
-      "room_id": 1,
-      "inspector": "???",
-      "items": [
-        {
-          "device_id": 1,
-          "status": "fault",
-          "fault_level": "high",
-          "note": "???????"
-        },
-        {
-          "device_id": 4,
-          "status": "fault",
-          "fault_level": "medium",
-          "note": "?????"
-        },
-        {
-          "device_id": 2,
-          "status": "normal"
-        },
-        {
-          "device_id": 3,
-          "status": "normal"
-        },
-        {
-          "device_id": 5,
-          "status": "normal"
-        },
-        {
-          "device_id": 6,
-          "status": "normal"
-        }
+      "name": "普通会员",
+      "level": 1,
+      "icon": "🥉",
+      "min_points": 0,
+      "discount_rate": 1,
+      "birthday_discount": 0.95,
+      "points_per_yuan": 1,
+      "description": "注册即成为普通会员",
+      "benefits": [
+        "生日享95折",
+        "积分1:1累积"
       ],
+      "id": 1,
+      "created_at": "2026-06-10T06:49:32.735Z"
+    },
+    {
+      "name": "银卡会员",
+      "level": 2,
+      "icon": "🥈",
+      "min_points": 1000,
+      "discount_rate": 0.95,
+      "birthday_discount": 0.9,
+      "points_per_yuan": 1.2,
+      "description": "累积消费满1000元升级",
+      "benefits": [
+        "全场95折",
+        "生日享9折",
+        "积分1.2倍累积",
+        "专属客服"
+      ],
+      "id": 2,
+      "created_at": "2026-06-10T06:49:32.736Z"
+    },
+    {
+      "name": "金卡会员",
+      "level": 3,
+      "icon": "🥇",
+      "min_points": 5000,
+      "discount_rate": 0.9,
+      "birthday_discount": 0.85,
+      "points_per_yuan": 1.5,
+      "description": "累积消费满5000元升级",
+      "benefits": [
+        "全场9折",
+        "生日享85折",
+        "积分1.5倍累积",
+        "优先预约权",
+        "免费升级包间1次/月"
+      ],
+      "id": 3,
+      "created_at": "2026-06-10T06:49:32.736Z"
+    },
+    {
+      "name": "钻石会员",
+      "level": 4,
+      "icon": "💎",
+      "min_points": 20000,
+      "discount_rate": 0.85,
+      "birthday_discount": 0.8,
+      "points_per_yuan": 2,
+      "description": "累积消费满20000元升级",
+      "benefits": [
+        "全场85折",
+        "生日享8折",
+        "积分2倍累积",
+        "优先预约权",
+        "免费升级包间2次/月",
+        "专属影厅预留",
+        "免费观影券2张/月"
+      ],
+      "id": 4,
+      "created_at": "2026-06-10T06:49:32.737Z"
+    }
+  ],
+  "members": [
+    {
+      "id": 1,
+      "name": "张先生",
+      "phone": "13800138001",
+      "gender": "男",
+      "birthday": "1990-05-15",
+      "email": "",
+      "address": "",
+      "level_id": 3,
+      "total_points": 8500,
+      "total_spent": 8500,
+      "status": "active",
+      "remark": "老客户，经常来",
+      "created_at": "2026-05-11T06:49:32.745Z"
+    },
+    {
+      "id": 2,
+      "name": "李女士",
+      "phone": "13800138002",
+      "gender": "女",
+      "birthday": "1992-08-20",
+      "email": "li@example.com",
+      "address": "",
+      "level_id": 2,
+      "total_points": 3200,
+      "total_spent": 3200,
+      "status": "active",
+      "remark": "喜欢爱情片",
+      "created_at": "2026-04-11T06:49:32.746Z"
+    },
+    {
+      "id": 3,
+      "name": "测试王小明",
+      "phone": "13900139000",
+      "gender": "男",
+      "birthday": "1995-06-10",
+      "email": "",
+      "address": "",
+      "level_id": 1,
+      "total_points": 0,
+      "total_spent": 0,
+      "status": "active",
       "remark": "",
-      "created_at": "2026-06-10T02:36:04.357Z"
+      "created_at": "2026-06-10T06:49:32.784Z"
     }
   ],
-  "faults": [
+  "member_packages": [
+    {
+      "name": "青铜套餐",
+      "price": 500,
+      "bonus": 50,
+      "gift_hours": 0,
+      "gift_desc": "充500送50",
+      "level_required": 1,
+      "is_active": true,
+      "id": 1,
+      "created_at": "2026-06-10T06:49:32.739Z"
+    },
+    {
+      "name": "白银套餐",
+      "price": 1000,
+      "bonus": 150,
+      "gift_hours": 2,
+      "gift_desc": "充1000送150+2小时免费观影",
+      "level_required": 1,
+      "is_active": true,
+      "id": 2,
+      "created_at": "2026-06-10T06:49:32.740Z"
+    },
+    {
+      "name": "黄金套餐",
+      "price": 3000,
+      "bonus": 600,
+      "gift_hours": 6,
+      "gift_desc": "充3000送600+6小时免费观影",
+      "level_required": 2,
+      "is_active": true,
+      "id": 3,
+      "created_at": "2026-06-10T06:49:32.741Z"
+    },
+    {
+      "name": "铂金套餐",
+      "price": 5000,
+      "bonus": 1200,
+      "gift_hours": 12,
+      "gift_desc": "充5000送1200+12小时免费观影",
+      "level_required": 2,
+      "is_active": true,
+      "id": 4,
+      "created_at": "2026-06-10T06:49:32.742Z"
+    },
+    {
+      "name": "钻石套餐",
+      "price": 10000,
+      "bonus": 3000,
+      "gift_hours": 30,
+      "gift_desc": "充10000送3000+30小时免费观影",
+      "level_required": 3,
+      "is_active": true,
+      "id": 5,
+      "created_at": "2026-06-10T06:49:32.743Z"
+    }
+  ],
+  "member_wallets": [
     {
       "id": 1,
-      "device_id": 1,
-      "inspection_id": 1,
-      "room_id": 1,
-      "title": "A101-投影机故障",
-      "description": "???????",
-      "level": "high",
-      "reported_by": "???",
-      "status": "resolved",
-      "created_at": "2026-06-10T02:36:04.357Z",
-      "resolved_at": "2026-06-10T02:36:04.420Z"
+      "member_id": 1,
+      "balance": 12680,
+      "gift_balance": 3150,
+      "free_hours": 35,
+      "total_recharged": 21000,
+      "total_consumed": 8320,
+      "created_at": "2026-05-11T06:49:32.745Z",
+      "updated_at": "2026-06-10T07:19:25.946Z"
     },
     {
       "id": 2,
-      "device_id": 4,
-      "inspection_id": 1,
-      "room_id": 1,
-      "title": "A101-灯光系统故障",
-      "description": "?????",
-      "level": "medium",
-      "reported_by": "???",
-      "status": "resolved",
-      "created_at": "2026-06-10T02:36:04.357Z",
-      "resolved_at": "2026-06-10T02:36:04.426Z"
+      "member_id": 2,
+      "balance": 850,
+      "gift_balance": 50,
+      "free_hours": 2,
+      "total_recharged": 4000,
+      "total_consumed": 3150,
+      "created_at": "2026-04-11T06:49:32.746Z",
+      "updated_at": "2026-06-10T06:49:32.747Z"
+    },
+    {
+      "id": 3,
+      "member_id": 3,
+      "balance": 3000,
+      "gift_balance": 300,
+      "free_hours": 4,
+      "total_recharged": 3000,
+      "total_consumed": 0,
+      "created_at": "2026-06-10T06:49:32.784Z",
+      "updated_at": "2026-06-10T07:18:05.200Z"
     }
   ],
-  "repairs": [
+  "member_wallet_logs": [
     {
       "id": 1,
-      "fault_id": 1,
-      "repairer": "???",
-      "repair_method": "????",
-      "parts_used": "",
-      "cost": 0,
-      "repair_note": "??????",
-      "status": "completed",
-      "created_at": "2026-06-10T02:36:04.420Z"
+      "member_id": 3,
+      "type": "recharge",
+      "amount": 1000,
+      "gift_amount": 0,
+      "balance_after": 1000,
+      "gift_after": 0,
+      "free_hours_after": 0,
+      "description": "开户赠送",
+      "operator": "系统",
+      "related_id": null,
+      "created_at": "2026-06-10T06:49:32.784Z"
     },
     {
       "id": 2,
-      "fault_id": 2,
-      "repairer": "???",
-      "repair_method": "????",
-      "parts_used": "?????",
-      "cost": 1800,
-      "repair_note": "???OK",
-      "status": "completed",
-      "created_at": "2026-06-10T02:36:04.426Z"
+      "member_id": 3,
+      "type": "recharge",
+      "amount": 1000,
+      "gift_amount": 150,
+      "free_hours_delta": 2,
+      "balance_after": 2000,
+      "gift_after": 150,
+      "free_hours_after": 2,
+      "description": "购买套餐: 白银套餐",
+      "operator": "管理员",
+      "related_id": 2,
+      "created_at": "2026-06-10T06:49:32.789Z"
+    },
+    {
+      "id": 3,
+      "member_id": 3,
+      "type": "recharge",
+      "amount": 1000,
+      "gift_amount": 150,
+      "free_hours_delta": 2,
+      "balance_after": 3000,
+      "gift_after": 300,
+      "free_hours_after": 4,
+      "description": "购买套餐: 白银套餐",
+      "operator": "管理员",
+      "related_id": 2,
+      "created_at": "2026-06-10T07:18:05.200Z"
+    },
+    {
+      "id": 4,
+      "member_id": 1,
+      "type": "recharge",
+      "amount": 10000,
+      "gift_amount": 3000,
+      "free_hours_delta": 30,
+      "balance_after": 12680,
+      "gift_after": 3150,
+      "free_hours_after": 35,
+      "description": "购买套餐: 钻石套餐",
+      "operator": "管理员",
+      "related_id": 5,
+      "created_at": "2026-06-10T07:19:25.946Z"
     }
   ],
+  "member_orders": [],
   "_ids": {
     "rooms": 9,
     "movie_categories": 8,
     "movies": 23,
-    "reservations": 6,
-    "transactions": 1,
+    "reservations": 0,
+    "transactions": 0,
     "devices": 54,
-    "inspections": 1,
-    "faults": 2,
-    "repairs": 2
+    "inspections": 0,
+    "faults": 0,
+    "repairs": 0,
+    "member_levels": 4,
+    "members": 3,
+    "member_packages": 5,
+    "member_wallets": 3,
+    "member_wallet_logs": 4,
+    "member_orders": 0
   }
 }
