@@ -1070,4 +1070,39 @@ body {
   white-space: normal;
 }
 
+.row-top-rank {
+  background: linear-gradient(135deg, #fefce8 0%, #fffbeb 100%);
+}
+.row-top-rank td {
+  font-weight: 600;
+}
+
+.category-tabs {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.category-tab {
+  padding: 8px 18px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: var(--card);
+  border: 1px solid var(--border);
+  transition: all 0.2s;
+  user-select: none;
+}
+.category-tab:hover {
+  background: var(--bg);
+  color: var(--text);
+}
+.category-tab.active {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+  box-shadow: 0 4px 12px rgba(99,102,241,0.3);
+}
+
 

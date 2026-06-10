@@ -1284,6 +1284,399 @@ app.get('/api/stats/inspection', (req, res) => {
   });
 });
 
+// ==================== 统计排行 ====================
+
+app.get('/api/stats/rankings', (req, res) => {
+  const { start_date, end_date } = req.query;
+  const d = load();
+
+  let startDate = null;
+  let endDate = null;
+  if (start_date) startDate = new Date(start_date);
+  if (end_date) {
+    endDate = new Date(end_date);
+    endDate.setDate(endDate.getDate() + 1);
+  }
+
+  function inRange(dateStr) {
+    const dt = new Date(dateStr);
+    if (startDate && dt < startDate) return false;
+    if (endDate && dt >= endDate) return false;
+    return true;
+  }
+
+  const completedReservations = d.reservations.filter(r =>
+    r.status === 'completed' && inRange(r.checkout_time || r.end_time)
+  );
+
+  const allCheckedInReservations = d.reservations.filter(r =>
+    ['checked_in', 'completed'].includes(r.status) &&
+    inRange(r.checkin_time || r.start_time)
+  );
+
+  const roomUsageMap = {};
+  d.rooms.forEach(room => {
+    roomUsageMap[room.id] = {
+      room_id: room.id,
+      room_name: room.name,
+      room_type: room.type,
+      total_hours: 0,
+      reservation_count: 0,
+      total_revenue: 0,
+      capacity: room.capacity,
+      price_per_hour: room.price_per_hour
+    };
+  });
+
+  allCheckedInReservations.forEach(r => {
+    const usage = roomUsageMap[r.room_id];
+    if (usage) {
+      const start = new Date(r.checkin_time || r.start_time);
+      const end = new Date(r.checkout_time || r.end_time);
+      const hours = Math.max(1, Math.ceil((end - start) / (1000 * 60 * 60)));
+      usage.total_hours += hours;
+      usage.reservation_count += 1;
+      usage.total_revenue += r.total_amount || 0;
+    }
+  });
+
+  let totalPeriodHours = 24 * 30;
+  if (startDate && endDate) {
+    totalPeriodHours = Math.max(24, Math.ceil((endDate - startDate) / (1000 * 60 * 60)));
+  }
+
+  const roomRankings = Object.values(roomUsageMap).map(u => ({
+    ...u,
+    usage_rate: totalPeriodHours > 0 ? Math.min(100, (u.total_hours / totalPeriodHours) * 100) : 0
+  })).sort((a, b) => b.total_hours - a.total_hours);
+
+  roomRankings.forEach((r, idx) => { r.rank = idx + 1; });
+
+  const movieWatchMap = {};
+  d.movies.forEach(movie => {
+    movieWatchMap[movie.id] = {
+      movie_id: movie.id,
+      movie_title: movie.title,
+      category_id: movie.category_id,
+      category_name: null,
+      duration: movie.duration,
+      rating: movie.rating,
+      watch_count: 0,
+      total_hours: 0,
+      total_revenue: 0
+    };
+  });
+
+  allCheckedInReservations.forEach(r => {
+    if (r.movie_id && movieWatchMap[r.movie_id]) {
+      const mw = movieWatchMap[r.movie_id];
+      mw.watch_count += 1;
+      const movie = d.movies.find(m => m.id === r.movie_id);
+      if (movie) {
+        mw.total_hours += movie.duration / 60;
+        mw.category_name = (d.movie_categories.find(c => c.id === movie.category_id))?.name || null;
+      }
+      mw.total_revenue += r.total_amount || 0;
+    }
+  });
+
+  const movieRankings = Object.values(movieWatchMap).filter(m => m.watch_count > 0)
+    .sort((a, b) => b.watch_count - a.watch_count || b.total_hours - a.total_hours);
+  movieRankings.forEach((m, idx) => { m.rank = idx + 1; });
+
+  const deviceFaultMap = {};
+  d.devices.forEach(dev => {
+    deviceFaultMap[dev.id] = {
+      device_id: dev.id,
+      device_name: dev.name,
+      device_type: dev.type_name,
+      device_icon: dev.icon,
+      room_id: dev.room_id,
+      room_name: null,
+      brand: dev.brand,
+      model: dev.model,
+      status: dev.status,
+      purchase_date: dev.purchase_date,
+      fault_count: 0,
+      pending_count: 0,
+      high_fault_count: 0,
+      repair_count: 0,
+      total_repair_cost: 0
+    };
+  });
+
+  const filteredFaults = d.faults.filter(f => inRange(f.created_at));
+  filteredFaults.forEach(f => {
+    if (deviceFaultMap[f.device_id]) {
+      const df = deviceFaultMap[f.device_id];
+      df.fault_count += 1;
+      if (!['resolved', 'closed'].includes(f.status)) df.pending_count += 1;
+      if (f.level === 'high') df.high_fault_count += 1;
+      const room = d.rooms.find(r => r.id === f.room_id);
+      if (room) df.room_name = room.name;
+    }
+  });
+
+  const filteredRepairs = d.repairs.filter(r => inRange(r.created_at));
+  filteredRepairs.forEach(r => {
+    const fault = d.faults.find(f => f.id === r.fault_id);
+    if (fault && deviceFaultMap[fault.device_id]) {
+      const df = deviceFaultMap[fault.device_id];
+      df.repair_count += 1;
+      df.total_repair_cost += r.cost || 0;
+    }
+  });
+
+  Object.values(deviceFaultMap).forEach(df => {
+    if (!df.room_name) {
+      const room = d.rooms.find(r => r.id === df.room_id);
+      if (room) df.room_name = room.name;
+    }
+  });
+
+  const deviceRankings = Object.values(deviceFaultMap)
+    .map(df => ({
+      ...df,
+      fault_rate: df.fault_count > 0 ? (df.fault_count / Math.max(1, d.faults.length)) * 100 : 0
+    }))
+    .sort((a, b) => b.fault_count - a.fault_count || b.high_fault_count - a.high_fault_count);
+  deviceRankings.forEach((d, idx) => { d.rank = idx + 1; });
+
+  const totalReservations = allCheckedInReservations.length;
+  const totalRevenue = completedReservations.reduce((s, r) => s + (r.total_amount || 0), 0);
+  const totalFaults = filteredFaults.length;
+  const highFaults = filteredFaults.filter(f => f.level === 'high').length;
+  const pendingFaults = filteredFaults.filter(f => !['resolved', 'closed'].includes(f.status)).length;
+  const totalRepairCost = filteredRepairs.reduce((s, r) => s + (r.cost || 0), 0);
+
+  res.json({
+    success: true,
+    data: {
+      summary: {
+        total_reservations: totalReservations,
+        total_revenue: totalRevenue,
+        total_faults: totalFaults,
+        high_faults: highFaults,
+        pending_faults: pendingFaults,
+        total_repair_cost: totalRepairCost,
+        period_start: startDate ? startDate.toISOString() : null,
+        period_end: endDate ? endDate.toISOString() : null
+      },
+      room_rankings: roomRankings,
+      movie_rankings: movieRankings,
+      device_rankings: deviceRankings
+    }
+  });
+});
+
+app.get('/api/stats/rankings/rooms', (req, res) => {
+  const { start_date, end_date } = req.query;
+  const d = load();
+
+  let startDate = null;
+  let endDate = null;
+  if (start_date) startDate = new Date(start_date);
+  if (end_date) {
+    endDate = new Date(end_date);
+    endDate.setDate(endDate.getDate() + 1);
+  }
+
+  function inRange(dateStr) {
+    const dt = new Date(dateStr);
+    if (startDate && dt < startDate) return false;
+    if (endDate && dt >= endDate) return false;
+    return true;
+  }
+
+  const allCheckedInReservations = d.reservations.filter(r =>
+    ['checked_in', 'completed'].includes(r.status) &&
+    inRange(r.checkin_time || r.start_time)
+  );
+
+  const roomUsageMap = {};
+  d.rooms.forEach(room => {
+    roomUsageMap[room.id] = {
+      room_id: room.id,
+      room_name: room.name,
+      room_type: room.type,
+      total_hours: 0,
+      reservation_count: 0,
+      total_revenue: 0,
+      capacity: room.capacity,
+      price_per_hour: room.price_per_hour
+    };
+  });
+
+  allCheckedInReservations.forEach(r => {
+    const usage = roomUsageMap[r.room_id];
+    if (usage) {
+      const start = new Date(r.checkin_time || r.start_time);
+      const end = new Date(r.checkout_time || r.end_time);
+      const hours = Math.max(1, Math.ceil((end - start) / (1000 * 60 * 60)));
+      usage.total_hours += hours;
+      usage.reservation_count += 1;
+      usage.total_revenue += r.total_amount || 0;
+    }
+  });
+
+  let totalPeriodHours = 24 * 30;
+  if (startDate && endDate) {
+    totalPeriodHours = Math.max(24, Math.ceil((endDate - startDate) / (1000 * 60 * 60)));
+  }
+
+  const rankings = Object.values(roomUsageMap).map(u => ({
+    ...u,
+    usage_rate: totalPeriodHours > 0 ? Math.min(100, (u.total_hours / totalPeriodHours) * 100) : 0
+  })).sort((a, b) => b.total_hours - a.total_hours);
+
+  rankings.forEach((r, idx) => { r.rank = idx + 1; });
+
+  res.json({ success: true, data: rankings });
+});
+
+app.get('/api/stats/rankings/movies', (req, res) => {
+  const { start_date, end_date, category_id } = req.query;
+  const d = load();
+
+  let startDate = null;
+  let endDate = null;
+  if (start_date) startDate = new Date(start_date);
+  if (end_date) {
+    endDate = new Date(end_date);
+    endDate.setDate(endDate.getDate() + 1);
+  }
+
+  function inRange(dateStr) {
+    const dt = new Date(dateStr);
+    if (startDate && dt < startDate) return false;
+    if (endDate && dt >= endDate) return false;
+    return true;
+  }
+
+  const allCheckedInReservations = d.reservations.filter(r =>
+    ['checked_in', 'completed'].includes(r.status) &&
+    inRange(r.checkin_time || r.start_time)
+  );
+
+  const movieWatchMap = {};
+  d.movies.forEach(movie => {
+    if (category_id && movie.category_id !== parseInt(category_id)) return;
+    movieWatchMap[movie.id] = {
+      movie_id: movie.id,
+      movie_title: movie.title,
+      category_id: movie.category_id,
+      category_name: null,
+      duration: movie.duration,
+      rating: movie.rating,
+      watch_count: 0,
+      total_hours: 0,
+      total_revenue: 0
+    };
+  });
+
+  allCheckedInReservations.forEach(r => {
+    if (r.movie_id && movieWatchMap[r.movie_id]) {
+      const mw = movieWatchMap[r.movie_id];
+      mw.watch_count += 1;
+      const movie = d.movies.find(m => m.id === r.movie_id);
+      if (movie) {
+        mw.total_hours += movie.duration / 60;
+        mw.category_name = (d.movie_categories.find(c => c.id === movie.category_id))?.name || null;
+      }
+      mw.total_revenue += r.total_amount || 0;
+    }
+  });
+
+  const rankings = Object.values(movieWatchMap)
+    .sort((a, b) => b.watch_count - a.watch_count || b.total_hours - a.total_hours);
+  rankings.forEach((m, idx) => { m.rank = idx + 1; });
+
+  res.json({ success: true, data: rankings });
+});
+
+app.get('/api/stats/rankings/devices', (req, res) => {
+  const { start_date, end_date, room_id, status } = req.query;
+  const d = load();
+
+  let startDate = null;
+  let endDate = null;
+  if (start_date) startDate = new Date(start_date);
+  if (end_date) {
+    endDate = new Date(end_date);
+    endDate.setDate(endDate.getDate() + 1);
+  }
+
+  function inRange(dateStr) {
+    const dt = new Date(dateStr);
+    if (startDate && dt < startDate) return false;
+    if (endDate && dt >= endDate) return false;
+    return true;
+  }
+
+  const deviceFaultMap = {};
+  d.devices.forEach(dev => {
+    if (room_id && dev.room_id !== parseInt(room_id)) return;
+    if (status && dev.status !== status) return;
+    deviceFaultMap[dev.id] = {
+      device_id: dev.id,
+      device_name: dev.name,
+      device_type: dev.type_name,
+      device_icon: dev.icon,
+      room_id: dev.room_id,
+      room_name: null,
+      brand: dev.brand,
+      model: dev.model,
+      status: dev.status,
+      purchase_date: dev.purchase_date,
+      fault_count: 0,
+      pending_count: 0,
+      high_fault_count: 0,
+      repair_count: 0,
+      total_repair_cost: 0
+    };
+  });
+
+  const filteredFaults = d.faults.filter(f => inRange(f.created_at));
+  filteredFaults.forEach(f => {
+    if (deviceFaultMap[f.device_id]) {
+      const df = deviceFaultMap[f.device_id];
+      df.fault_count += 1;
+      if (!['resolved', 'closed'].includes(f.status)) df.pending_count += 1;
+      if (f.level === 'high') df.high_fault_count += 1;
+      const room = d.rooms.find(r => r.id === f.room_id);
+      if (room) df.room_name = room.name;
+    }
+  });
+
+  const filteredRepairs = d.repairs.filter(r => inRange(r.created_at));
+  filteredRepairs.forEach(r => {
+    const fault = d.faults.find(f => f.id === r.fault_id);
+    if (fault && deviceFaultMap[fault.device_id]) {
+      const df = deviceFaultMap[fault.device_id];
+      df.repair_count += 1;
+      df.total_repair_cost += r.cost || 0;
+    }
+  });
+
+  Object.values(deviceFaultMap).forEach(df => {
+    if (!df.room_name) {
+      const room = d.rooms.find(r => r.id === df.room_id);
+      if (room) df.room_name = room.name;
+    }
+  });
+
+  const totalFaultsInPeriod = filteredFaults.length || 1;
+  const rankings = Object.values(deviceFaultMap)
+    .map(df => ({
+      ...df,
+      fault_rate: (df.fault_count / totalFaultsInPeriod) * 100
+    }))
+    .sort((a, b) => b.fault_count - a.fault_count || b.high_fault_count - a.high_fault_count);
+  rankings.forEach((d, idx) => { d.rank = idx + 1; });
+
+  res.json({ success: true, data: rankings });
+});
+
 // ==================== 辅助函数：包间状态自动联动 ====================
 
 function fmtDTLocal(dateIso) {

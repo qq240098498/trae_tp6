@@ -2330,6 +2330,465 @@ async function exportLedger() {
   showToast('台账已导出', 'success');
 }
 
+// ==================== 统计排行 ====================
+
+let rankingFilter = { start_date: '', end_date: '' };
+let currentRankingTab = 'rooms';
+
+async function renderRankings() {
+  setActivePage('rankings', '统计排行');
+  categoriesCache = categoriesCache.length ? categoriesCache : await request(`${API}/categories`) || [];
+
+  const dateHtml = `
+    <div class="filter-bar">
+      <div class="category-tabs" id="rankingTabs">
+        <div class="category-tab ${currentRankingTab==='rooms'?'active':''}" onclick="setRankingTab('rooms')">🏠 包间使用率排行</div>
+        <div class="category-tab ${currentRankingTab==='movies'?'active':''}" onclick="setRankingTab('movies')">🎬 影片观看率排行</div>
+        <div class="category-tab ${currentRankingTab==='devices'?'active':''}" onclick="setRankingTab('devices')">⚙️ 设备故障率排行</div>
+      </div>
+    </div>
+    <div class="filter-bar">
+      <div class="form-group" style="margin-bottom:0">
+        <label class="form-label">开始日期</label>
+        <input class="form-input" type="date" value="${rankingFilter.start_date}" 
+               onchange="rankingFilter.start_date=this.value;renderRankingData()">
+      </div>
+      <div class="form-group" style="margin-bottom:0">
+        <label class="form-label">结束日期</label>
+        <input class="form-input" type="date" value="${rankingFilter.end_date}" 
+               onchange="rankingFilter.end_date=this.value;renderRankingData()">
+      </div>
+      <button class="btn btn-outline" onclick="rankingFilter={start_date:'',end_date:''};renderRankings()">重置日期</button>
+      <button class="btn btn-sm" onclick="setQuickDate(7)" style="margin-left:8px">近7天</button>
+      <button class="btn btn-sm" onclick="setQuickDate(30)" style="margin-left:4px">近30天</button>
+      <button class="btn btn-sm" onclick="setQuickDate(90)" style="margin-left:4px">近90天</button>
+      <div style="margin-left:auto">
+        <button class="btn btn-outline" onclick="exportRankingsCsv()">📥 导出</button>
+      </div>
+    </div>
+    <div id="rankingData"></div>
+  `;
+
+  document.getElementById('pageContent').innerHTML = dateHtml;
+  await renderRankingData();
+}
+
+function setQuickDate(days) {
+  const end = new Date();
+  const start = new Date();
+  start.setDate(start.getDate() - days + 1);
+  rankingFilter.start_date = start.toISOString().split('T')[0];
+  rankingFilter.end_date = end.toISOString().split('T')[0];
+  renderRankings();
+}
+
+function setRankingTab(tab) {
+  currentRankingTab = tab;
+  renderRankings();
+}
+
+function getRankingParams() {
+  const params = [];
+  if (rankingFilter.start_date) params.push(`start_date=${rankingFilter.start_date}`);
+  if (rankingFilter.end_date) params.push(`end_date=${rankingFilter.end_date}`);
+  return params.length ? '?' + params.join('&') : '';
+}
+
+async function renderRankingData() {
+  const container = document.getElementById('rankingData');
+  if (!container) return;
+
+  if (currentRankingTab === 'rooms') {
+    const data = await request(`${API}/stats/rankings/rooms${getRankingParams()}`);
+    if (!data) return;
+    container.innerHTML = renderRoomRankingTable(data);
+  } else if (currentRankingTab === 'movies') {
+    const data = await request(`${API}/stats/rankings/movies${getRankingParams()}`);
+    if (!data) return;
+    container.innerHTML = renderMovieRankingTable(data);
+  } else if (currentRankingTab === 'devices') {
+    const data = await request(`${API}/stats/rankings/devices${getRankingParams()}`);
+    if (!data) return;
+    container.innerHTML = renderDeviceRankingTable(data);
+  }
+}
+
+function rankBadge(rank) {
+  const colors = ['#f59e0b', '#9ca3af', '#b45309'];
+  if (rank <= 3) {
+    return `<span style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;background:${colors[rank-1]};color:#fff;font-weight:700;font-size:14px">${rank}</span>`;
+  }
+  return `<span style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;background:#e2e8f0;color:#475569;font-weight:600;font-size:13px">${rank}</span>`;
+}
+
+function progressBar(value, max, color = 'var(--primary)') {
+  const pct = max > 0 ? Math.min(100, (value / max) * 100) : 0;
+  return `
+    <div style="background:#e2e8f0;border-radius:6px;height:8px;overflow:hidden;width:100%;min-width:100px">
+      <div style="width:${pct}%;height:100%;background:${color};border-radius:6px;transition:width .3s"></div>
+    </div>
+  `;
+}
+
+function renderRoomRankingTable(data) {
+  if (!data.length) {
+    return '<div class="card"><div class="empty-state"><div class="empty-state-icon">📭</div>暂无统计数据，请先创建预约记录</div></div>';
+  }
+
+  const maxHours = Math.max(...data.map(r => r.total_hours), 1);
+  const maxRevenue = Math.max(...data.map(r => r.total_revenue), 1);
+
+  return `
+    <div class="stats-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:20px">
+      <div class="stat-card blue">
+        <div class="stat-label">包间总数</div>
+        <div class="stat-value">${data.length}<span class="stat-unit">间</span></div>
+        <div class="stat-icon">🏠</div>
+      </div>
+      <div class="stat-card green">
+        <div class="stat-label">总使用时长</div>
+        <div class="stat-value">${data.reduce((s,r)=>s+r.total_hours,0)}<span class="stat-unit">小时</span></div>
+        <div class="stat-icon">⏱️</div>
+      </div>
+      <div class="stat-card orange">
+        <div class="stat-label">总预约数</div>
+        <div class="stat-value">${data.reduce((s,r)=>s+r.reservation_count,0)}<span class="stat-unit">单</span></div>
+        <div class="stat-icon">📋</div>
+      </div>
+      <div class="stat-card purple">
+        <div class="stat-label">总营收</div>
+        <div class="stat-value" style="color:#8b5cf6">${fmtMoney(data.reduce((s,r)=>s+r.total_revenue,0))}</div>
+        <div class="stat-icon">💰</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h3>🏠 包间使用率排行榜</h3></div>
+      <div class="card-body" style="padding:0">
+        <table class="data-table">
+          <thead><tr>
+            <th style="width:60px">排名</th>
+            <th>包间名称</th>
+            <th>包间类型</th>
+            <th>容纳人数</th>
+            <th style="width:180px">使用时长</th>
+            <th>时长占比</th>
+            <th>预约数</th>
+            <th style="width:180px">营收</th>
+            <th>营收占比</th>
+            <th>使用率</th>
+          </tr></thead>
+          <tbody>
+            ${data.map(r => `
+              <tr class="${r.rank<=3?'row-top-rank':''}">
+                <td>${rankBadge(r.rank)}</td>
+                <td><strong style="font-size:15px">${r.room_name}</strong></td>
+                <td><span class="badge badge-info">${r.room_type}</span></td>
+                <td>👥 ${r.capacity}人</td>
+                <td><strong>${r.total_hours}</strong> 小时</td>
+                <td style="min-width:120px">
+                  ${progressBar(r.total_hours, maxHours, '#10b981')}
+                  <small style="color:var(--text-muted)">${((r.total_hours/maxHours)*100).toFixed(1)}%</small>
+                </td>
+                <td><strong>${r.reservation_count}</strong> 单</td>
+                <td style="color:var(--primary);font-weight:700">${fmtMoney(r.total_revenue)}</td>
+                <td style="min-width:120px">
+                  ${progressBar(r.total_revenue, maxRevenue, '#f59e0b')}
+                  <small style="color:var(--text-muted)">${maxRevenue>0?((r.total_revenue/maxRevenue)*100).toFixed(1):0}%</small>
+                </td>
+                <td>
+                  <div style="display:flex;align-items:center;gap:8px">
+                    <strong style="color:${r.usage_rate>=60?'var(--success)':r.usage_rate>=30?'var(--warning)':'var(--danger)'}">${r.usage_rate.toFixed(1)}%</strong>
+                  </div>
+                  ${progressBar(r.usage_rate, 100, r.usage_rate>=60?'var(--success)':r.usage_rate>=30?'var(--warning)':'var(--danger)')}
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+function renderMovieRankingTable(data) {
+  const withData = data.filter(m => m.watch_count > 0);
+  if (!withData.length) {
+    return '<div class="card"><div class="empty-state"><div class="empty-state-icon">📭</div>暂无统计数据，请在预约中选择影片</div></div>';
+  }
+
+  const maxWatch = Math.max(...withData.map(m => m.watch_count), 1);
+  const maxRevenue = Math.max(...withData.map(m => m.total_revenue), 1);
+  const topCategories = {};
+  withData.forEach(m => {
+    if (m.category_name) {
+      topCategories[m.category_name] = (topCategories[m.category_name] || 0) + m.watch_count;
+    }
+  });
+
+  return `
+    <div class="stats-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:20px">
+      <div class="stat-card blue">
+        <div class="stat-label">影片总数</div>
+        <div class="stat-value">${data.length}<span class="stat-unit">部</span></div>
+        <div class="stat-icon">🎬</div>
+      </div>
+      <div class="stat-card green">
+        <div class="stat-label">被观看影片</div>
+        <div class="stat-value">${withData.length}<span class="stat-unit">部</span></div>
+        <div class="stat-icon">🎞️</div>
+      </div>
+      <div class="stat-card orange">
+        <div class="stat-label">总观看次数</div>
+        <div class="stat-value">${withData.reduce((s,m)=>s+m.watch_count,0)}<span class="stat-unit">次</span></div>
+        <div class="stat-icon">📊</div>
+      </div>
+      <div class="stat-card purple">
+        <div class="stat-label">总观看时长</div>
+        <div class="stat-value">${withData.reduce((s,m)=>s+m.total_hours,0).toFixed(1)}<span class="stat-unit">小时</span></div>
+        <div class="stat-icon">⏰</div>
+      </div>
+    </div>
+
+    ${Object.keys(topCategories).length ? `
+    <div class="card" style="margin-bottom:20px">
+      <div class="card-header"><h3>📂 分类观看分布</h3></div>
+      <div class="card-body">
+        <div style="display:flex;gap:16px;flex-wrap:wrap">
+          ${Object.entries(topCategories).sort((a,b)=>b[1]-a[1]).map(([cat, count], i) => {
+            const colors = ['#6366f1','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#ec4899','#84cc16'];
+            const total = Object.values(topCategories).reduce((s,v)=>s+v,0);
+            const pct = ((count/total)*100).toFixed(1);
+            return `
+              <div style="flex:1;min-width:140px;padding:14px;border-radius:10px;border:1px solid var(--border);background:var(--card)">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+                  <strong>${cat}</strong>
+                  <span style="font-size:12px;color:var(--text-muted)">${pct}%</span>
+                </div>
+                ${progressBar(count, total, colors[i%colors.length])}
+                <div style="margin-top:6px;font-size:13px;color:var(--text-muted)">观看 <strong style="color:var(--text)">${count}</strong> 次</div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+    </div>
+    ` : ''}
+
+    <div class="card">
+      <div class="card-header"><h3>🎬 影片观看率排行榜</h3></div>
+      <div class="card-body" style="padding:0">
+        <table class="data-table">
+          <thead><tr>
+            <th style="width:60px">排名</th>
+            <th>影片名称</th>
+            <th>分类</th>
+            <th>评分</th>
+            <th>时长</th>
+            <th style="width:180px">观看次数</th>
+            <th>热度占比</th>
+            <th>总观看时长</th>
+            <th>关联营收</th>
+          </tr></thead>
+          <tbody>
+            ${withData.map(m => `
+              <tr class="${m.rank<=3?'row-top-rank':''}">
+                <td>${rankBadge(m.rank)}</td>
+                <td><strong style="font-size:15px">${m.movie_title}</strong></td>
+                <td><span class="badge badge-info">${m.category_name || '未分类'}</span></td>
+                <td>⭐ ${m.rating.toFixed(1)}</td>
+                <td>⏱️ ${m.duration}分钟</td>
+                <td><strong style="color:var(--primary);font-size:16px">${m.watch_count}</strong> 次</td>
+                <td style="min-width:120px">
+                  ${progressBar(m.watch_count, maxWatch, '#8b5cf6')}
+                  <small style="color:var(--text-muted)">${((m.watch_count/maxWatch)*100).toFixed(1)}%</small>
+                </td>
+                <td>${m.total_hours.toFixed(1)} 小时</td>
+                <td style="color:#f59e0b;font-weight:700">${fmtMoney(m.total_revenue)}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+function deviceStatusText(status) {
+  const map = { normal: '正常', warning: '预警', fault: '故障', maintenance: '维护中' };
+  return map[status] || status;
+}
+
+function renderDeviceRankingTable(data) {
+  const withData = data.filter(d => d.fault_count > 0);
+  if (!withData.length) {
+    return `
+      <div class="stats-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:20px">
+        <div class="stat-card blue">
+          <div class="stat-label">设备总数</div>
+          <div class="stat-value">${data.length}<span class="stat-unit">台</span></div>
+          <div class="stat-icon">⚙️</div>
+        </div>
+        <div class="stat-card green">
+          <div class="stat-label">正常设备</div>
+          <div class="stat-value">${data.filter(d=>d.status==='normal').length}<span class="stat-unit">台</span></div>
+          <div class="stat-icon">✅</div>
+        </div>
+        <div class="stat-card orange">
+          <div class="stat-label">故障设备</div>
+          <div class="stat-value">${data.filter(d=>d.status==='fault').length}<span class="stat-unit">台</span></div>
+          <div class="stat-icon">⚠️</div>
+        </div>
+        <div class="stat-card purple">
+          <div class="stat-label">故障总数</div>
+          <div class="stat-value">0<span class="stat-unit">次</span></div>
+          <div class="stat-icon">📊</div>
+        </div>
+      </div>
+      <div class="card"><div class="empty-state"><div class="empty-state-icon">🎉</div>太棒了！统计周期内暂无故障记录</div></div>
+    `;
+  }
+
+  const maxFaults = Math.max(...withData.map(d => d.fault_count), 1);
+  const maxCost = Math.max(...withData.map(d => d.total_repair_cost), 1);
+  const totalFaults = withData.reduce((s,d)=>s+d.fault_count,0);
+  const totalHighFaults = withData.reduce((s,d)=>s+d.high_fault_count,0);
+  const totalPendingFaults = withData.reduce((s,d)=>s+d.pending_count,0);
+  const totalRepairCost = data.reduce((s,d)=>s+d.total_repair_cost,0);
+
+  return `
+    <div class="stats-grid" style="grid-template-columns:repeat(5,1fr);margin-bottom:20px">
+      <div class="stat-card blue">
+        <div class="stat-label">设备总数</div>
+        <div class="stat-value">${data.length}<span class="stat-unit">台</span></div>
+        <div class="stat-icon">⚙️</div>
+      </div>
+      <div class="stat-card red">
+        <div class="stat-label">故障总数</div>
+        <div class="stat-value">${totalFaults}<span class="stat-unit">次</span></div>
+        <div class="stat-icon">⚠️</div>
+      </div>
+      <div class="stat-card orange">
+        <div class="stat-label">高危故障</div>
+        <div class="stat-value">${totalHighFaults}<span class="stat-unit">次</span></div>
+        <div class="stat-icon">🚨</div>
+      </div>
+      <div class="stat-card purple">
+        <div class="stat-label">待处理</div>
+        <div class="stat-value">${totalPendingFaults}<span class="stat-unit">项</span></div>
+        <div class="stat-icon">⏳</div>
+      </div>
+      <div class="stat-card" style="background:linear-gradient(135deg,#fef3c7,#fde68a)">
+        <div class="stat-label">维修总费用</div>
+        <div class="stat-value" style="color:#92400e">${fmtMoney(totalRepairCost)}</div>
+        <div class="stat-icon">💸</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h3>⚙️ 设备故障率排行榜</h3></div>
+      <div class="card-body" style="padding:0">
+        <table class="data-table">
+          <thead><tr>
+            <th style="width:60px">排名</th>
+            <th>设备</th>
+            <th>所属包间</th>
+            <th>品牌/型号</th>
+            <th>当前状态</th>
+            <th style="width:160px">故障次数</th>
+            <th>故障占比</th>
+            <th>高危</th>
+            <th>待处理</th>
+            <th>维修费用</th>
+          </tr></thead>
+          <tbody>
+            ${withData.map(d => `
+              <tr class="${d.rank<=3?'row-top-rank':''}">
+                <td>${rankBadge(d.rank)}</td>
+                <td>
+                  <div style="display:flex;align-items:center;gap:8px">
+                    <span style="font-size:22px">${d.device_icon}</span>
+                    <div>
+                      <strong>${d.device_name}</strong>
+                      <div style="font-size:12px;color:var(--text-muted)">${d.device_type}</div>
+                    </div>
+                  </div>
+                </td>
+                <td><span class="badge badge-info">${d.room_name || '-'}</span></td>
+                <td style="font-size:13px">${d.brand || '-'} ${d.model ? '/ ' + d.model : ''}</td>
+                <td>
+                  <span class="badge badge-${d.status==='normal'?'success':d.status==='warning'?'warning':'danger'}">
+                    ${deviceStatusText(d.status)}
+                  </span>
+                </td>
+                <td><strong style="color:${d.fault_count>=3?'var(--danger)':d.fault_count>=2?'var(--warning)':'var(--text)'};font-size:16px">${d.fault_count}</strong> 次</td>
+                <td style="min-width:120px">
+                  ${progressBar(d.fault_count, maxFaults, d.fault_count>=3?'var(--danger)':d.fault_count>=2?'var(--warning)':'var(--info)')}
+                  <small style="color:var(--text-muted)">${((d.fault_count/maxFaults)*100).toFixed(1)}%</small>
+                </td>
+                <td>${d.high_fault_count > 0 ? `<span class="badge badge-danger">🚨 ${d.high_fault_count}次</span>` : '<span style="color:var(--text-muted)">-</span>'}</td>
+                <td>${d.pending_count > 0 ? `<span class="badge badge-warning">⏳ ${d.pending_count}项</span>` : '<span style="color:var(--success)">已处理</span>'}</td>
+                <td style="font-weight:700">${fmtMoney(d.total_repair_cost)}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+async function exportRankingsCsv() {
+  const params = getRankingParams();
+  let data = [];
+  let headers = [];
+  let filename = '';
+
+  if (currentRankingTab === 'rooms') {
+    data = await request(`${API}/stats/rankings/rooms${params}`) || [];
+    headers = ['排名','包间名称','包间类型','容纳人数','使用时长(小时)','预约数','营收','使用率(%)'];
+    filename = '包间使用率排行';
+  } else if (currentRankingTab === 'movies') {
+    data = await request(`${API}/stats/rankings/movies${params}`) || [];
+    headers = ['排名','影片名称','分类','评分','时长(分钟)','观看次数','观看时长(小时)','关联营收'];
+    filename = '影片观看率排行';
+  } else {
+    data = await request(`${API}/stats/rankings/devices${params}`) || [];
+    headers = ['排名','设备名称','类型','所属包间','品牌','型号','当前状态','故障次数','高危次数','待处理','维修费用'];
+    filename = '设备故障率排行';
+  }
+
+  if (!data.length) {
+    showToast('暂无可导出的数据', 'warning');
+    return;
+  }
+
+  let csv = '\uFEFF' + headers.join(',') + '\n';
+  data.forEach(r => {
+    let row = [];
+    if (currentRankingTab === 'rooms') {
+      row = [r.rank, r.room_name, r.room_type, r.capacity+'人', r.total_hours, r.reservation_count,
+             (r.total_revenue||0).toFixed(2), r.usage_rate.toFixed(1)];
+    } else if (currentRankingTab === 'movies') {
+      row = [r.rank, r.movie_title, r.category_name||'未分类', r.rating.toFixed(1), r.duration,
+             r.watch_count, r.total_hours.toFixed(1), (r.total_revenue||0).toFixed(2)];
+    } else {
+      row = [r.rank, r.device_name, r.device_type, r.room_name||'-', r.brand||'-', r.model||'-',
+             deviceStatusText(r.status), r.fault_count, r.high_fault_count, r.pending_count,
+             (r.total_repair_cost||0).toFixed(2)];
+    }
+    csv += row.map(x => `"${String(x).replace(/"/g,'""')}"`).join(',') + '\n';
+  });
+
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  const dateRange = rankingFilter.start_date ? `${rankingFilter.start_date}_${rankingFilter.end_date||new Date().toISOString().split('T')[0]}` : 'all';
+  a.download = `${filename}_${dateRange}.csv`;
+  a.click();
+  showToast('导出成功', 'success');
+}
+
 // ==================== 路由 ====================
 
 function renderPage(page) {
@@ -2346,6 +2805,7 @@ function renderPage(page) {
     case 'inspection-register': return renderInspectionRegister();
     case 'faults': return renderFaults();
     case 'ledger': return renderLedger();
+    case 'rankings': return renderRankings();
     default: return renderDashboard();
   }
 }
