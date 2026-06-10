@@ -54,7 +54,21 @@ app.get('/api/rooms', (req, res) => {
         const movie = r.movie_id ? d.movies.find(m => m.id === r.movie_id) : null;
         return { ...r, movie_title: movie?.title || null };
       })[0] || null;
-    return { ...room, active_reservation: activeResv };
+
+    const pendingFaults = d.faults.filter(f =>
+      f.room_id === room.id && !['resolved', 'closed'].includes(f.status)
+    );
+    const warningDevices = d.devices.filter(dv => dv.room_id === room.id && dv.status === 'warning');
+
+    return {
+      ...room,
+      active_reservation: activeResv,
+      pending_fault_count: pendingFaults.length,
+      pending_fault_level: pendingFaults.some(f => f.level === 'high') ? 'high' :
+                           pendingFaults.some(f => f.level === 'medium') ? 'medium' :
+                           pendingFaults.some(f => f.level === 'low') ? 'low' : null,
+      warning_device_count: warningDevices.length
+    };
   });
 
   res.json({ success: true, data: result });
@@ -241,6 +255,37 @@ app.post('/api/reservations', (req, res) => {
 
   const room = d.rooms.find(r => r.id === roomId);
   if (!room) return res.status(404).json({ success: false, message: '包间不存在' });
+
+  const pendingFaults = d.faults.filter(f =>
+    f.room_id === roomId && !['resolved', 'closed'].includes(f.status)
+  );
+
+  if (pendingFaults.length > 0) {
+    const highCount = pendingFaults.filter(f => f.level === 'high').length;
+    const medCount = pendingFaults.filter(f => f.level === 'medium').length;
+    const lowCount = pendingFaults.filter(f => f.level === 'low').length;
+    const levelDesc = [
+      highCount ? `高${highCount}` : null,
+      medCount ? `中${medCount}` : null,
+      lowCount ? `低${lowCount}` : null
+    ].filter(Boolean).join('/');
+    return res.status(400).json({
+      success: false,
+      message: `该包间当前存在${pendingFaults.length}项未解决设备故障（${levelDesc}级），为确保观影体验，暂不接受预约。请先处理设备故障后再预约。`,
+      data: { fault_count: pendingFaults.length }
+    });
+  }
+
+  if (room.status === 'maintenance') {
+    return res.status(400).json({
+      success: false,
+      message: '该包间当前处于维护中，暂不接受预约，请选择其他包间或稍后再试。'
+    });
+  }
+
+  if (room.status === 'occupied') {
+    return res.status(400).json({ success: false, message: '该包间当前正在使用中，请选择其他时间段或包间' });
+  }
 
   const hours = Math.ceil((end - start) / (1000 * 60 * 60));
   const total_amount = hours * room.price_per_hour;
@@ -739,8 +784,13 @@ app.post('/api/inspections', (req, res) => {
     }
   });
 
+  if (faultItems.length && room.status === 'idle') {
+    room.status = 'maintenance';
+  }
+
   save();
-  res.json({ success: true, data: { id, fault_ids: faultIds } });
+  refreshRoomStatus(parseInt(room_id));
+  res.json({ success: true, data: { id, fault_ids: faultIds, room_locked: faultItems.length > 0 } });
 });
 
 app.get('/api/inspections/:id', (req, res) => {
@@ -807,12 +857,13 @@ app.post('/api/faults', (req, res) => {
   const dev = d.devices.find(dv => dv.id === parseInt(device_id));
   if (!dev) return res.status(404).json({ success: false, message: '设备不存在' });
 
+  const rid = room_id ? parseInt(room_id) : dev.room_id;
   const id = nextId('faults');
   const now = new Date().toISOString();
   const fault = {
     id,
     device_id: parseInt(device_id),
-    room_id: room_id ? parseInt(room_id) : dev.room_id,
+    room_id: rid,
     inspection_id: null,
     title,
     description: description || '',
@@ -824,7 +875,14 @@ app.post('/api/faults', (req, res) => {
   };
   d.faults.push(fault);
   dev.status = 'fault';
+
+  const room = d.rooms.find(r => r.id === rid);
+  if (room && room.status === 'idle') {
+    room.status = 'maintenance';
+  }
+
   save();
+  refreshRoomStatus(rid);
   res.json({ success: true, data: fault });
 });
 
@@ -849,15 +907,21 @@ app.put('/api/faults/:id/status', (req, res) => {
   if (idx === -1) return res.status(404).json({ success: false, message: '故障记录不存在' });
 
   d.faults[idx].status = status;
-  if (status === 'resolved') {
-    d.faults[idx].resolved_at = new Date().toISOString();
+  if (['resolved', 'closed'].includes(status)) {
+    d.faults[idx].resolved_at = d.faults[idx].resolved_at || new Date().toISOString();
     const dev = d.devices.find(dv => dv.id === d.faults[idx].device_id);
     if (dev && dev.status === 'fault') {
       const hasOtherFault = d.faults.some(f => f.device_id === dev.id && f.id !== d.faults[idx].id && !['resolved', 'closed'].includes(f.status));
       if (!hasOtherFault) dev.status = 'normal';
     }
+    const room = d.rooms.find(r => r.id === d.faults[idx].room_id);
+    if (room && room.status === 'maintenance') {
+      const hasRoomFault = d.faults.some(f => f.room_id === room.id && !['resolved', 'closed'].includes(f.status));
+      if (!hasRoomFault) room.status = 'idle';
+    }
   }
   save();
+  refreshRoomStatus(d.faults[idx].room_id);
   res.json({ success: true, message: '状态更新成功' });
 });
 
@@ -933,7 +997,14 @@ app.post('/api/repairs', (req, res) => {
     if (!hasOtherFault) dev.status = 'normal';
   }
 
+  const room = d.rooms.find(r => r.id === d.faults[faultIdx].room_id);
+  if (room && room.status === 'maintenance') {
+    const hasRoomFault = d.faults.some(f => f.room_id === room.id && f.id !== d.faults[faultIdx].id && !['resolved', 'closed'].includes(f.status));
+    if (!hasRoomFault) room.status = 'idle';
+  }
+
   save();
+  refreshRoomStatus(d.faults[faultIdx].room_id);
   res.json({ success: true, data: repair });
 });
 
@@ -996,6 +1067,35 @@ app.get('/api/stats/inspection', (req, res) => {
     }
   });
 });
+
+// ==================== 辅助函数：包间状态自动联动 ====================
+
+function refreshRoomStatus(roomId) {
+  const d = load();
+  const idx = d.rooms.findIndex(r => r.id === roomId);
+  if (idx === -1) return;
+  const room = d.rooms[idx];
+
+  const pendingFaults = d.faults.filter(f =>
+    f.room_id === roomId && !['resolved', 'closed'].includes(f.status)
+  );
+
+  const isOccupied = d.reservations.some(r =>
+    r.room_id === roomId && r.status === 'checked_in' && new Date(r.end_time) > new Date()
+  );
+  if (isOccupied) return;
+
+  if (pendingFaults.length > 0 && room.status === 'idle') {
+    d.rooms[idx].status = 'maintenance';
+    save();
+    return;
+  }
+  if (pendingFaults.length === 0 && room.status === 'maintenance') {
+    d.rooms[idx].status = 'idle';
+    save();
+    return;
+  }
+}
 
 // ==================== 启动服务 ====================
 

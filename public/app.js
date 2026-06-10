@@ -250,8 +250,32 @@ function renderRoomCard(r) {
     </div>
   ` : '';
 
+  const faultBadge = r.pending_fault_count > 0 ? `
+    <div class="fault-badge fault-badge-${r.pending_fault_level || 'medium'}">
+      ⚠️ ${r.pending_fault_count}项故障
+    </div>
+  ` : (r.warning_device_count > 0 && r.status !== 'maintenance' ? `
+    <div class="fault-badge fault-badge-low">
+      ⚡ ${r.warning_device_count}项预警
+    </div>
+  ` : '');
+
+  const maintenanceBlock = r.status === 'maintenance' ? `
+    <div class="maintenance-block">
+      <div class="maintenance-title">🔒 设备维护中，暂不接受预约</div>
+      <div class="maintenance-desc">
+        ${r.pending_fault_count > 0
+          ? `待处理故障 ${r.pending_fault_count} 项${r.pending_fault_level === 'high' ? '（含高优先级）' : ''}，请先修复设备`
+          : '包间正在进行例行设备维护'}
+      </div>
+    </div>
+  ` : '';
+
   return `
-    <div class="room-card status-${r.status}" onclick="showRoomDetail(${r.id})">
+    <div class="room-card status-${r.status} ${r.pending_fault_count > 0 ? 'has-fault' : ''}"
+         onclick="showRoomDetail(${r.id})"
+         style="position:relative">
+      ${faultBadge}
       <div class="room-header">
         <div class="room-name">${r.name}</div>
         <div class="room-status ${r.status}">${statusText(r.status)}</div>
@@ -264,11 +288,15 @@ function renderRoomCard(r) {
       </div>
       <div class="room-price">${fmtMoney(r.price_per_hour)}<small>/小时</small></div>
       ${resvHtml}
+      ${maintenanceBlock}
       <div class="room-actions">
         ${r.status === 'idle' ? `
           <button class="btn btn-sm btn-primary" onclick="event.stopPropagation();showBookingModal(${r.id})">预约</button>
         ` : r.status === 'occupied' ? `
           <button class="btn btn-sm btn-danger" onclick="event.stopPropagation();showCheckoutModal(${r.id})">结算退房</button>
+        ` : r.status === 'maintenance' ? `
+          <button class="btn btn-sm btn-warning" onclick="event.stopPropagation();navigateAndFilterFaults(${r.id})">🔧 查看故障</button>
+          <button class="btn btn-sm btn-info" onclick="event.stopPropagation();showInspectionModal(${r.id})">📋 立即巡检</button>
         ` : ''}
       </div>
     </div>
@@ -282,6 +310,15 @@ async function filterRooms(status, el) {
   if (rooms) {
     document.getElementById('roomsGrid').innerHTML = rooms.map(renderRoomCard).join('');
   }
+}
+
+function navigateAndFilterFaults(roomId) {
+  faultFilter = { room_id: roomId, status: '', level: '' };
+  currentPage = '';
+  document.querySelectorAll('.menu-item').forEach(m => m.classList.remove('active'));
+  document.querySelector('[data-page="faults"]').classList.add('active');
+  document.getElementById('pageTitle').textContent = '故障上报与维修';
+  renderFaults();
 }
 
 async function showRoomDetail(id) {
@@ -302,6 +339,38 @@ async function showRoomDetail(id) {
     </tbody></table>` :
     '<div class="empty-state"><div class="empty-state-icon">📭</div>暂无预约记录</div>';
 
+  let maintenanceHtml = '';
+  if (room.status === 'maintenance') {
+    const faults = await request(`${API}/faults?room_id=${id}&status=pending`) ||
+                   await request(`${API}/faults?room_id=${id}&status=processing`) || [];
+    const allFaults = (await request(`${API}/faults?room_id=${id}`)) || [];
+    const activeFaults = allFaults.filter(f => !['resolved', 'closed'].includes(f.status));
+    maintenanceHtml = `
+      <div class="card-header" style="padding:14px 0;border:none;border-top:1px solid var(--border);margin-top:8px">
+        <h3>⚠️ 设备异常（禁止预约）</h3>
+      </div>
+      <div class="stat-card" style="box-shadow:none;background:#fef2f2;border:1px solid #fecaca;color:#991b1b">
+        <div class="stat-label">当前存在 <strong style="font-size:16px;color:#991b1b">${activeFaults.length}</strong> 项待处理故障</div>
+        <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-warning btn-sm" onclick="closeModal();navigateAndFilterFaults(${id})">🔧 查看并处理故障</button>
+          <button class="btn btn-info btn-sm" onclick="closeModal();setTimeout(()=>showInspectionModal(${id}),100)">📋 立即巡检</button>
+        </div>
+      </div>
+      ${activeFaults.length ? `
+        <table class="data-table">
+          <thead><tr><th>设备</th><th>标题</th><th>级别</th><th>状态</th></tr></thead>
+          <tbody>
+          ${activeFaults.map(f => `<tr>
+            <td>${f.device_icon} ${f.device_type}</td>
+            <td>${f.title}</td>
+            <td><span class="badge badge-${f.level}">${faultLevelText(f.level)}</span></td>
+            <td><span class="fault-status fault-status-${f.status}">${faultStatusText(f.status)}</span></td>
+          </tr>`).join('')}
+          </tbody>
+        </table>` : ''}
+    `;
+  }
+
   showModal(`
     <div class="form-row">
       <div>
@@ -313,7 +382,10 @@ async function showRoomDetail(id) {
       <div>
         <div class="stat-card" style="box-shadow:none;border:1px solid var(--border)">
           <div class="stat-label">当前状态</div>
-          <div class="stat-value" style="font-size:20px;color:${room.status==='idle'?'var(--success)':'var(--danger)'}">${statusText(room.status)}</div>
+          <div class="stat-value" style="font-size:20px;color:${
+            room.status==='idle'?'var(--success)':
+            room.status==='maintenance'?'var(--warning)':'var(--danger)'
+          }">${statusText(room.status)}</div>
         </div>
       </div>
     </div>
@@ -322,6 +394,7 @@ async function showRoomDetail(id) {
       <div class="form-group"><div class="form-label">容纳人数</div><div>${room.capacity} 人</div></div>
       <div class="form-group"><div class="form-label">小时单价</div><div style="color:var(--primary);font-weight:700">${fmtMoney(room.price_per_hour)}</div></div>
     </div>
+    ${maintenanceHtml}
     <div class="card-header" style="padding:14px 0;border:none;border-top:1px solid var(--border);margin-top:8px">
       <h3>📅 预约排期</h3>
     </div>
@@ -581,12 +654,47 @@ async function showResvDetail(id) {
   `, `订单详情 #${r.id}`);
 }
 
+function navigateAndFilterFaults(roomId) {
+  currentPage = 'faults';
+  document.querySelectorAll('.menu-item').forEach(i => i.classList.remove('active'));
+  document.querySelector('[data-page="faults"]')?.classList.add('active');
+  document.getElementById('pageTitle').textContent = '故障上报与维修';
+  faultFilter = { room_id: roomId, status: '', level: '' };
+  renderFaultList();
+}
+
 // ==================== 预约弹窗 ====================
 
 async function showBookingModal(preRoomId) {
   const rooms = await request(`${API}/rooms`);
   categoriesCache = categoriesCache.length ? categoriesCache : await request(`${API}/categories`) || [];
   moviesCache = await request(`${API}/movies`) || [];
+
+  const bookedRooms = rooms.filter(r => r.status === 'maintenance' || r.pending_fault_count > 0);
+  const availableRooms = rooms.filter(r => r.status !== 'maintenance' && (r.pending_fault_count || 0) === 0);
+  let warningHtml = '';
+  if (preRoomId) {
+    const preRoom = rooms.find(r => r.id === parseInt(preRoomId));
+    const locked = preRoom && (preRoom.status === 'maintenance' || (preRoom.pending_fault_count || 0) > 0);
+    if (locked) {
+      const reason = (preRoom.pending_fault_count || 0) > 0
+        ? `当前存在 ${preRoom.pending_fault_count} 项未解决设备故障`
+        : '处于维护状态';
+      warningHtml = `<div style="margin-bottom:14px;padding:10px 12px;background:#fef2f2;border:1px solid #fecaca;color:#991b1b;border-radius:8px;font-size:13px">
+        ⚠️ 包间 <strong>${preRoom.name}</strong> ${reason}，暂不接受预约，请选择其他包间。
+      </div>`;
+      preRoomId = null;
+    }
+  }
+  if (!availableRooms.length) {
+    warningHtml += `<div style="margin-bottom:14px;padding:10px 12px;background:#fef3c7;border:1px solid #fde68a;color:#92400e;border-radius:8px;font-size:13px">
+      ⚠️ 当前${bookedRooms.length}个包间存在设备问题，暂无可预约包间，请先处理设备故障。
+    </div>`;
+  } else if (bookedRooms.length > 0) {
+    warningHtml += `<div style="margin-bottom:14px;padding:10px 12px;background:#f0f9ff;border:1px solid #bae6fd;color:#075985;border-radius:8px;font-size:13px">
+      💡 已过滤 ${bookedRooms.length} 个存在设备故障/维护中的包间，仅显示可正常预约的包间。
+    </div>`;
+  }
 
   const now = new Date();
   const pad = n => String(n).padStart(2, '0');
@@ -595,15 +703,16 @@ async function showBookingModal(preRoomId) {
   const fmtDT = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 
   showModal(`
+    ${warningHtml}
     <div class="form-row">
       <div class="form-group">
         <label class="form-label">选择包间 *</label>
-        <select class="form-select" id="b_room">
-          ${rooms.filter(r => r.status !== 'maintenance').map(r => `
+        <select class="form-select" id="b_room" ${!availableRooms.length?'disabled':''}>
+          ${availableRooms.map(r => `
             <option value="${r.id}" data-price="${r.price_per_hour}" ${preRoomId==r.id?'selected':''}>
               ${r.name} - ${r.type} (${r.capacity}人) - ${fmtMoney(r.price_per_hour)}/时
             </option>
-          `).join('')}
+          `).join('') || '<option value="">暂无可预约包间</option>'}
         </select>
       </div>
       <div class="form-group">
