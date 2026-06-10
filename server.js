@@ -1345,12 +1345,27 @@ app.get('/api/stats/rankings', (req, res) => {
     totalPeriodHours = Math.max(24, Math.ceil((endDate - startDate) / (1000 * 60 * 60)));
   }
 
-  const roomRankings = Object.values(roomUsageMap).map(u => ({
-    ...u,
-    usage_rate: totalPeriodHours > 0 ? Math.min(100, (u.total_hours / totalPeriodHours) * 100) : 0
-  })).sort((a, b) => b.total_hours - a.total_hours);
+  const roomUsageList = Object.values(roomUsageMap);
+  const sumUsedHours = roomUsageList
+    .filter(u => u.total_hours > 0)
+    .reduce((s, u) => s + u.total_hours, 0);
 
-  roomRankings.forEach((r, idx) => { r.rank = idx + 1; });
+  const roomRankings = roomUsageList
+    .map(u => ({
+      ...u,
+      usage_rate: sumUsedHours > 0 ? ((u.total_hours / sumUsedHours) * 100) : 0
+    }))
+    .sort((a, b) => b.total_hours - a.total_hours);
+
+  let rankCounter = 0;
+  roomRankings.forEach(r => {
+    if (r.total_hours > 0) {
+      rankCounter++;
+      r.rank = rankCounter;
+    } else {
+      r.rank = null;
+    }
+  });
 
   const movieWatchMap = {};
   d.movies.forEach(movie => {
@@ -1524,12 +1539,27 @@ app.get('/api/stats/rankings/rooms', (req, res) => {
     totalPeriodHours = Math.max(24, Math.ceil((endDate - startDate) / (1000 * 60 * 60)));
   }
 
-  const rankings = Object.values(roomUsageMap).map(u => ({
-    ...u,
-    usage_rate: totalPeriodHours > 0 ? Math.min(100, (u.total_hours / totalPeriodHours) * 100) : 0
-  })).sort((a, b) => b.total_hours - a.total_hours);
+  const roomUsageList = Object.values(roomUsageMap);
+  const sumUsedHours = roomUsageList
+    .filter(u => u.total_hours > 0)
+    .reduce((s, u) => s + u.total_hours, 0);
 
-  rankings.forEach((r, idx) => { r.rank = idx + 1; });
+  const rankings = roomUsageList
+    .map(u => ({
+      ...u,
+      usage_rate: sumUsedHours > 0 ? ((u.total_hours / sumUsedHours) * 100) : 0
+    }))
+    .sort((a, b) => b.total_hours - a.total_hours);
+
+  let rankCounter = 0;
+  rankings.forEach(r => {
+    if (r.total_hours > 0) {
+      rankCounter++;
+      r.rank = rankCounter;
+    } else {
+      r.rank = null;
+    }
+  });
 
   res.json({ success: true, data: rankings });
 });

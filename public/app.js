@@ -2414,6 +2414,9 @@ async function renderRankingData() {
 }
 
 function rankBadge(rank) {
+  if (rank === null || rank === undefined) {
+    return `<span style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;background:#f8fafc;color:#94a3b8;font-weight:500;font-size:12px">-</span>`;
+  }
   const colors = ['#f59e0b', '#9ca3af', '#b45309'];
   if (rank <= 3) {
     return `<span style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;background:${colors[rank-1]};color:#fff;font-weight:700;font-size:14px">${rank}</span>`;
@@ -2437,22 +2440,28 @@ function renderRoomRankingTable(data) {
 
   const maxHours = Math.max(...data.map(r => r.total_hours), 1);
   const maxRevenue = Math.max(...data.map(r => r.total_revenue), 1);
+  const rankedRooms = data.filter(r => r.rank !== null).length;
 
   return `
-    <div class="stats-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:20px">
+    <div class="stats-grid" style="grid-template-columns:repeat(5,1fr);margin-bottom:20px">
       <div class="stat-card blue">
         <div class="stat-label">包间总数</div>
         <div class="stat-value">${data.length}<span class="stat-unit">间</span></div>
         <div class="stat-icon">🏠</div>
       </div>
       <div class="stat-card green">
+        <div class="stat-label">参与排名</div>
+        <div class="stat-value">${rankedRooms}<span class="stat-unit">间</span></div>
+        <div class="stat-icon">🏆</div>
+      </div>
+      <div class="stat-card orange">
         <div class="stat-label">总使用时长</div>
         <div class="stat-value">${data.reduce((s,r)=>s+r.total_hours,0)}<span class="stat-unit">小时</span></div>
         <div class="stat-icon">⏱️</div>
       </div>
-      <div class="stat-card orange">
+      <div class="stat-card" style="background:linear-gradient(135deg,#f0fdf4,#dcfce7)">
         <div class="stat-label">总预约数</div>
-        <div class="stat-value">${data.reduce((s,r)=>s+r.reservation_count,0)}<span class="stat-unit">单</span></div>
+        <div class="stat-value" style="color:#15803d">${data.reduce((s,r)=>s+r.reservation_count,0)}<span class="stat-unit">单</span></div>
         <div class="stat-icon">📋</div>
       </div>
       <div class="stat-card purple">
@@ -2480,27 +2489,29 @@ function renderRoomRankingTable(data) {
           </tr></thead>
           <tbody>
             ${data.map(r => `
-              <tr class="${r.rank<=3?'row-top-rank':''}">
+              <tr class="${r.rank !== null && r.rank<=3?'row-top-rank':''} ${r.rank === null ? 'row-no-rank' : ''}">
                 <td>${rankBadge(r.rank)}</td>
                 <td><strong style="font-size:15px">${r.room_name}</strong></td>
                 <td><span class="badge badge-info">${r.room_type}</span></td>
                 <td>👥 ${r.capacity}人</td>
-                <td><strong>${r.total_hours}</strong> 小时</td>
+                <td>${r.total_hours > 0 ? `<strong>${r.total_hours}</strong> 小时` : `<span style="color:var(--text-muted)">0 小时</span>`}</td>
                 <td style="min-width:120px">
-                  ${progressBar(r.total_hours, maxHours, '#10b981')}
-                  <small style="color:var(--text-muted)">${((r.total_hours/maxHours)*100).toFixed(1)}%</small>
+                  ${r.total_hours > 0 ? progressBar(r.total_hours, maxHours, '#10b981') : '<span style="color:var(--text-muted)">—</span>'}
+                  <small style="color:var(--text-muted)">${maxHours>0?((r.total_hours/maxHours)*100).toFixed(1):0}%</small>
                 </td>
-                <td><strong>${r.reservation_count}</strong> 单</td>
-                <td style="color:var(--primary);font-weight:700">${fmtMoney(r.total_revenue)}</td>
+                <td>${r.reservation_count > 0 ? `<strong>${r.reservation_count}</strong> 单` : `<span style="color:var(--text-muted)">0 单</span>`}</td>
+                <td style="${r.total_revenue>0?'color:var(--primary);font-weight:700':'color:var(--text-muted)'}">${fmtMoney(r.total_revenue)}</td>
                 <td style="min-width:120px">
-                  ${progressBar(r.total_revenue, maxRevenue, '#f59e0b')}
+                  ${r.total_revenue > 0 ? progressBar(r.total_revenue, maxRevenue, '#f59e0b') : '<span style="color:var(--text-muted)">—</span>'}
                   <small style="color:var(--text-muted)">${maxRevenue>0?((r.total_revenue/maxRevenue)*100).toFixed(1):0}%</small>
                 </td>
                 <td>
-                  <div style="display:flex;align-items:center;gap:8px">
-                    <strong style="color:${r.usage_rate>=60?'var(--success)':r.usage_rate>=30?'var(--warning)':'var(--danger)'}">${r.usage_rate.toFixed(1)}%</strong>
-                  </div>
-                  ${progressBar(r.usage_rate, 100, r.usage_rate>=60?'var(--success)':r.usage_rate>=30?'var(--warning)':'var(--danger)')}
+                  ${r.total_hours > 0 ? `
+                    <div style="display:flex;align-items:center;gap:8px">
+                      <strong style="color:${r.usage_rate>=25?'var(--success)':r.usage_rate>=10?'var(--warning)':'var(--text)'}">${r.usage_rate.toFixed(1)}%</strong>
+                    </div>
+                    ${progressBar(r.usage_rate, 100, r.usage_rate>=25?'var(--success)':r.usage_rate>=10?'var(--warning)':'var(--primary)')}
+                  ` : '<span style="color:var(--text-muted);font-size:13px">未使用</span>'}
                 </td>
               </tr>
             `).join('')}
