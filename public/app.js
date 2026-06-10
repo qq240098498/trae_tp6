@@ -17,7 +17,7 @@ async function request(url, options = {}) {
       showToast(data.message || '请求失败', 'error');
       return null;
     }
-    return data.data;
+    return data.data !== undefined ? data.data : true;
   } catch (e) {
     showToast('网络错误: ' + e.message, 'error');
     return null;

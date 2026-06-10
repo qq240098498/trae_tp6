@@ -1266,7 +1266,7 @@
       "discount_rate": 0.85,
       "birthday_discount": 0.8,
       "points_per_yuan": 2,
-      "description": "累积消费满20000元升级",
+      "description": "累积消费满20000元111升级",
       "benefits": [
         "全场85折",
         "生日享8折",
@@ -1340,17 +1340,6 @@
       "created_at": "2026-06-10T06:49:32.739Z"
     },
     {
-      "name": "白银套餐",
-      "price": 1000,
-      "bonus": 150,
-      "gift_hours": 2,
-      "gift_desc": "充1000送150+2小时免费观影",
-      "level_required": 1,
-      "is_active": true,
-      "id": 2,
-      "created_at": "2026-06-10T06:49:32.740Z"
-    },
-    {
       "name": "黄金套餐",
       "price": 3000,
       "bonus": 600,
@@ -1360,28 +1349,6 @@
       "is_active": true,
       "id": 3,
       "created_at": "2026-06-10T06:49:32.741Z"
-    },
-    {
-      "name": "铂金套餐",
-      "price": 5000,
-      "bonus": 1200,
-      "gift_hours": 12,
-      "gift_desc": "充5000送1200+12小时免费观影",
-      "level_required": 2,
-      "is_active": true,
-      "id": 4,
-      "created_at": "2026-06-10T06:49:32.742Z"
-    },
-    {
-      "name": "钻石套餐",
-      "price": 10000,
-      "bonus": 3000,
-      "gift_hours": 30,
-      "gift_desc": "充10000送3000+30小时免费观影",
-      "level_required": 3,
-      "is_active": true,
-      "id": 5,
-      "created_at": "2026-06-10T06:49:32.743Z"
     }
   ],
   "member_wallets": [
